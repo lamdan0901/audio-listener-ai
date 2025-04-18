@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const { spawn } = require('child_process');
@@ -13,173 +12,138 @@ const server = require('http').createServer(app);
 const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 
-// Configure Google services
+// Google clients
 const speechClient = new speech.SpeechClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 let ffmpegProcess = null;
 let isRecording = false;
+let currentOutputFile = null;
 
 app.use(express.static('public'));
 app.use(express.json());
 
-// Routes
-let currentOutputFile = null;
-
 app.post('/start', (req, res) => {
   if (isRecording) return res.status(400).send('Already recording');
-  
+  // we could store req.body.language here if needed per-session
   currentOutputFile = `audio/${Date.now()}.wav`;
   const ffmpegArgs = getFfmpegArgs(currentOutputFile);
-  
-  // Add error listeners
   ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
-  ffmpegProcess.stderr.on('data', (data) => {
-    console.error(`FFmpeg Error: ${data}`);
-  });
-
-
-// Update FFmpeg process handling
-ffmpegProcess.on('close', (code) => {
-  isRecording = false;
-  if (code !== 0 && code !== null) {
-    console.error(`FFmpeg exited with code ${code}`);
-    // Cleanup if file was partially created
-    if (currentOutputFile && fs.existsSync(currentOutputFile)) {
-      fs.unlinkSync(currentOutputFile);
+  ffmpegProcess.stderr.on('data', d => console.error(`FFmpeg Error: ${d}`));
+  ffmpegProcess.on('close', code => {
+    isRecording = false;
+    if (code !== 0 && code !== null) {
+      console.error(`FFmpeg exited with code ${code}`);
+      if (currentOutputFile && fs.existsSync(currentOutputFile)) fs.unlinkSync(currentOutputFile);
     }
-  }
-  currentOutputFile = null;
-});
-
-// Add process exit handler
-process.on('exit', () => {
-  if (currentOutputFile && fs.existsSync(currentOutputFile)) {
-    fs.unlinkSync(currentOutputFile);
-  }
-});
-
+    currentOutputFile = null;
+  });
+  process.on('exit', () => {
+    if (currentOutputFile && fs.existsSync(currentOutputFile)) fs.unlinkSync(currentOutputFile);
+  });
   isRecording = true;
   res.status(200).send('Recording started');
 });
 
 app.post('/stop', async (req, res) => {
   if (!isRecording) return res.status(400).send('Not recording');
-
+  // read the language flag from the front‑end
+  const lang = req.body.language === 'en' ? 'en' : 'vi';
   ffmpegProcess.kill('SIGINT');
   isRecording = false;
 
-  const checkFile = async (retries = 10) => {
-    if (retries === 0) {
-      throw new Error('File not found after 2 seconds');
-    }
-    
-    if (!fs.existsSync(currentOutputFile)) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      return checkFile(retries - 1);
-    }
-    
-    const stats = fs.statSync(currentOutputFile);
-    if (stats.size < 1024) {
-      throw new Error('Empty audio file');
-    }
-    return true;
-  };
-
   try {
-    const fileExists = await checkFile();
-    if (fileExists) {
-      io.emit('processing');
-      const transcript = await transcribeAudio(currentOutputFile);
-      const answer = await generateAnswer(transcript);
-      io.emit('update', { transcript, answer });
+    // wait for file to be ready...
+    await waitForFile(currentOutputFile);
+    io.emit('processing');
+
+    // choose correct speech‐to‐text language code
+    const languageCode = lang === 'vi' ? 'vi-VN' : 'en-US';
+    const transcript = await transcribeAudio(currentOutputFile, languageCode);
+	
+	if (!transcript) {
+      const apology = languageCode.startsWith('vi')
+        ? 'Xin lỗi, tôi không nghe rõ. Vui lòng thử lại.'
+        : 'Sorry, I didn’t catch that. Please try again.';
+      
+      io.emit('update', {
+        transcript: '',
+        answer: apology
+      });
+      return res.status(200).send('No speech detected');
     }
-  } catch (error) {
-    console.error('Processing error:', error);
-    io.emit('error', error.message);
+
+    // generate with a small prompt‐prefix if Vietnamese
+    const answer = await generateAnswer(transcript, lang);
+    io.emit('update', { transcript, answer });
+  } catch (err) {
+    console.error('Processing error:', err);
+    io.emit('error', err.message);
   } finally {
-    // Safe file cleanup
-    if (currentOutputFile && fs.existsSync(currentOutputFile)) {
-      fs.unlinkSync(currentOutputFile);
-    }
+    if (currentOutputFile && fs.existsSync(currentOutputFile)) fs.unlinkSync(currentOutputFile);
     currentOutputFile = null;
   }
-  
+
   res.status(200).send('Recording stopped');
 });
 
-// Helper functions
-function getFfmpegArgs(outputFile) {
-  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+// Helpers
 
+function getFfmpegArgs(outputFile) {
+  const args = ['-y','-hide_banner','-loglevel','error'];
   if (process.platform === 'win32') {
-  args.push('-f','dshow','-i','audio=virtual-audio-capturer')
+    args.push('-f','dshow','-i','audio=virtual-audio-capturer');
   } else if (process.platform === 'linux') {
-    // see Linux section below
-    args.push(
-      '-f', 'pulse',
-      '-i', 'YOUR_MONITOR_SOURCE_NAME'
-    );
+    args.push('-f','pulse','-i','YOUR_MONITOR_SOURCE_NAME');
   } else {
     throw new Error('Unsupported platform');
   }
-
-  // common encoding settings
-  args.push(
-    '-ac', '1',
-    '-ar', '16000',
-    '-acodec', 'pcm_s16le',
-    outputFile
-  );
+  args.push('-ac','1','-ar','16000','-acodec','pcm_s16le', outputFile);
   return args;
 }
 
-async function transcribeAudio(filePath) {
-  try {
-    const audioBytes = fs.readFileSync(filePath);
-    if (audioBytes.length < 1024) {
-      throw new Error('Audio file too small');
-    }
-
-    const audio = {
-      content: audioBytes.toString('base64'),
-    };
-    
-    const [response] = await speechClient.recognize({
-      audio: audio,
-      config: {
-        encoding: 'LINEAR16',
-        sampleRateHertz: 16000,
-        languageCode: 'en-US',
-      },
-    });
-
-    if (!response.results || response.results.length === 0) {
-      throw new Error('No transcription results');
-    }
-
-    return response.results[0].alternatives[0].transcript;
-  } catch (error) {
-    throw new Error(`Transcription failed: ${error.message}`);
+async function waitForFile(filePath, retries = 10) {
+  if (retries === 0) throw new Error('Audio file not found in time');
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).size < 1024) {
+    await new Promise(r => setTimeout(r, 200));
+    return waitForFile(filePath, retries - 1);
   }
+  return true;
 }
 
-async function generateAnswer(question) {
+async function transcribeAudio(filePath, languageCode) {
+  const audioBytes = fs.readFileSync(filePath).toString('base64');
+  const [response] = await speechClient.recognize({
+    audio: { content: audioBytes },
+    config: {
+      encoding: 'LINEAR16',
+      sampleRateHertz: 16000,
+	  enableAutomaticPunctuation: true,
+      languageCode
+    }
+  });
+  if (!response.results?.length) throw new Error('No transcription results');
+  return response.results[0].alternatives[0].transcript;
+}
+
+async function generateAnswer(question, lang) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
-  const prompt = `Answer the following question concisely using Markdown formatting for better readability: ${question}.
-    Use headings, lists, and code blocks where appropriate. Also, the questions are often in frontend development with html, css, javascript, typescript, reactjs, next.js and related tech`;
+  let prompt;
+  if (lang === 'vi') {
+    prompt = `Question will be in Vietnamese and answer must be in Vietnamese. ` +
+             `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
+             `Use headings, lists, and code blocks where appropriate.`;
+  } else {
+    prompt = `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
+             `Use headings, lists, and code blocks where appropriate.`;
+  }
   const result = await model.generateContent(prompt);
   return result.response.text();
 }
 
-// WebSocket setup
-io.on('connection', (socket) => {
-  console.log('Client connected');
-});
+io.on('connection', socket => console.log('Client connected'));
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  if (!fs.existsSync('audio')) {
-    fs.mkdirSync('audio', { recursive: true });
-  }
+  if (!fs.existsSync('audio')) fs.mkdirSync('audio', { recursive: true });
 });

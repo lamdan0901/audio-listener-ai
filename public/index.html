@@ -1,52 +1,58 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html>
 <head>
   <title>Audio Listener AI</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-	
     .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
-	
     .recording { background: #ffebee; color: #c62828; }
-	
     .idle { background: #e8f5e9; color: #2e7d32; }
-	
     button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-	
-  .loading {
-    background: #e3f2fd;
-    color: #1976d2;
-    display: none; /* Hidden by default */
-  }
-  
-  .loader {
-    border: 3px solid #f3f3f3;
-    border-radius: 50%;
-    border-top: 3px solid #2196F3;
-    width: 20px;
-    height: 20px;
-    animation: spin 1s linear infinite;
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 10px;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
+    .loading {
+      background: #e3f2fd;
+      color: #1976d2;
+      display: none;
+    }
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 3px solid #2196F3;
+      width: 20px; height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #language-selection { margin-bottom: 1em; }
+    #language-selection label { margin-right: 1em; }
   </style>
   <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <h1>Audio Listener AI</h1>
+
+  <!-- ◀️ LANGUAGE CHOOSER -->
+  <div id="language-selection">
+    <strong>Language:</strong>
+    <label>
+      <input type="radio" name="language" value="vi" checked>
+      Vietnamese
+    </label>
+    <label>
+      <input type="radio" name="language" value="en">
+      English
+    </label>
+  </div>
+
   <div class="status idle" id="status">Status: Idle</div>
   <div id="loading" class="status loading">
-  <div class="loader"></div>
-  Processing your question...
-</div>
+    <div class="loader"></div>
+    Processing your question...
+  </div>
+
   <button onclick="toggleRecording()" id="toggleBtn">Start Listening</button>
+
   <div id="question" style="margin-top: 20px;"></div>
   <div id="answer" style="margin-top: 10px; white-space: pre-wrap; overflow-wrap: break-word;"></div>
 
@@ -54,44 +60,53 @@
   <script>
     const socket = io();
     let isRecording = false;
-	
-	socket.on('processing', () => {
-  document.getElementById('loading').style.display = 'block';
-});
 
+    socket.on('processing', () => {
+      document.getElementById('loading').style.display = 'block';
+    });
 
-  socket.on('update', (data) => {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('question').innerHTML = `<strong>Question:</strong> ${data.transcript}`;
-    document.getElementById('answer').innerHTML = 
-      `<strong>Answer:</strong>\n${marked.parse(data.answer)}`;
-  });
+    socket.on('update', (data) => {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('question').innerHTML = `<strong>Question:</strong> ${data.transcript}`;
+      document.getElementById('answer').innerHTML =
+        `<strong>Answer:</strong>\n${marked.parse(data.answer)}`;
+    });
 
-socket.on('error', (message) => {
-  document.getElementById('loading').style.display = 'none';
-  console.log('error',message)
-});
+    socket.on('error', (message) => {
+      document.getElementById('loading').style.display = 'none';
+      console.error('Processing error:', message);
+    });
 
-function toggleRecording() {
-  const btn = document.getElementById('toggleBtn');
-  const status = document.getElementById('status');
-  const loading = document.getElementById('loading');
-  
-  if (!isRecording) {
-    fetch('/start', { method: 'POST' });
-    btn.textContent = 'Stop Listening';
-    status.className = 'status recording';
-    status.textContent = 'Status: Recording...';
-    loading.style.display = 'none';
-  } else {
-    fetch('/stop', { method: 'POST' });
-    btn.textContent = 'Start Listening';
-    status.className = 'status idle';
-    status.textContent = 'Status: Idle';
-    loading.style.display = 'block'; // Show immediately on stop click
-  }
-  isRecording = !isRecording;
-}
+    function toggleRecording() {
+      const btn = document.getElementById('toggleBtn');
+      const status = document.getElementById('status');
+      const loading = document.getElementById('loading');
+      // grab the selected language each time
+      const lang = document.querySelector('input[name="language"]:checked').value;
+
+      if (!isRecording) {
+        fetch('/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: lang })
+        });
+        btn.textContent = 'Stop Listening';
+        status.className = 'status recording';
+        status.textContent = 'Status: Recording...';
+        loading.style.display = 'none';
+      } else {
+        fetch('/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: lang })
+        });
+        btn.textContent = 'Start Listening';
+        status.className = 'status idle';
+        status.textContent = 'Status: Idle';
+        loading.style.display = 'block'; // show processing immediately
+      }
+      isRecording = !isRecording;
+    }
   </script>
 </body>
 </html>
