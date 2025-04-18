@@ -5,10 +5,15 @@
   <title>Audio Listener AI</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+	
     .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+	
     .recording { background: #ffebee; color: #c62828; }
+	
     .idle { background: #e8f5e9; color: #2e7d32; }
+	
     button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+	
   .loading {
     background: #e3f2fd;
     color: #1976d2;
@@ -32,6 +37,7 @@
     100% { transform: rotate(360deg); }
   }
   </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <h1>Audio Listener AI</h1>
@@ -42,7 +48,7 @@
 </div>
   <button onclick="toggleRecording()" id="toggleBtn">Start Listening</button>
   <div id="question" style="margin-top: 20px;"></div>
-  <div id="answer" style="margin-top: 10px; white-space: pre-wrap;"></div>
+  <div id="answer" style="margin-top: 10px; white-space: pre-wrap; overflow-wrap: break-word;"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -54,11 +60,12 @@
 });
 
 
-    socket.on('update', (data) => {
-  document.getElementById('loading').style.display = 'none';
-      document.getElementById('question').innerHTML = `<strong>Question:</strong> ${data.transcript}`;
-      document.getElementById('answer').innerHTML = `<strong>Answer:</strong>\n${data.answer}`;
-    });
+  socket.on('update', (data) => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('question').innerHTML = `<strong>Question:</strong> ${data.transcript}`;
+    document.getElementById('answer').innerHTML = 
+      `<strong>Answer:</strong>\n${marked.parse(data.answer)}`;
+  });
 
 socket.on('error', (message) => {
   document.getElementById('loading').style.display = 'none';

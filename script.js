@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const { spawn } = require('child_process');
-const speech = require('@google-cloud/speech').v1;
+const speech = require('@google-cloud/speech');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const socketIo = require('socket.io');
 const path = require('path');
@@ -12,19 +12,6 @@ const app = express();
 const server = require('http').createServer(app);
 const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
-
-// Configure streaming recognition
-const streamingConfig = {
-  config: {
-    encoding: 'LINEAR16',
-    sampleRateHertz: 16000,
-    languageCode: 'en-US',
-    enableAutomaticPunctuation: true,
-    model: 'latest_long',
-    useEnhanced: true,
-  },
-  interimResults: false,
-};
 
 // Configure Google services
 const speechClient = new speech.SpeechClient();
@@ -123,33 +110,27 @@ app.post('/stop', async (req, res) => {
 
 // Helper functions
 function getFfmpegArgs(outputFile) {
-  const args = [
-    '-y', '-hide_banner', '-loglevel', 'error'
-  ];
+  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
 
   if (process.platform === 'win32') {
-    args.push(
-      '-f', 'dshow',
-      '-i', 'audio=CABLE Output (VB-Audio Virtual Cable)',
-      '-fflags', '+genpts'
-    );
+  args.push('-f','dshow','-i','audio=virtual-audio-capturer')
   } else if (process.platform === 'linux') {
+    // see Linux section below
     args.push(
       '-f', 'pulse',
-      '-i', 'default',
-      '-filter_complex', 'aresample=16000'
+      '-i', 'YOUR_MONITOR_SOURCE_NAME'
     );
   } else {
     throw new Error('Unsupported platform');
   }
 
+  // common encoding settings
   args.push(
     '-ac', '1',
     '-ar', '16000',
     '-acodec', 'pcm_s16le',
     outputFile
   );
-
   return args;
 }
 
@@ -185,7 +166,8 @@ async function transcribeAudio(filePath) {
 
 async function generateAnswer(question) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
-  const prompt = `Answer the following question concisely: ${question}`;
+  const prompt = `Answer the following question concisely using Markdown formatting for better readability: ${question}.
+    Use headings, lists, and code blocks where appropriate. Also, the questions are often in frontend development with html, css, javascript, typescript, reactjs, next.js and related tech`;
   const result = await model.generateContent(prompt);
   return result.response.text();
 }
