@@ -1,0 +1,101 @@
+body {
+  font-family: Arial, sans-serif;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-size: 1.2em;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.status {
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+}
+.recording {
+  background: #ffebee;
+  color: #c62828;
+}
+.idle {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.loading {
+  background: #e3f2fd;
+  color: #1976d2;
+  display: none;
+}
+.loader {
+  border: 3px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 3px solid #2196f3;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+
+#language-selection {
+  margin-bottom: 1em;
+}
+#language-selection label {
+  margin-right: 1em;
+}
+
+#speech-speed-selection {
+  margin-bottom: 1em;
+}
+
+#speech-speed-selection select {
+  padding: 6px;
+  font-size: 16px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  margin-left: 5px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+#answer {
+  margin-top: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+#answer p {
+  margin: 0.5em 0;
+}
+
+#answer pre {
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+#answer code {
+  font-family: monospace;
+  background-color: #f5f5f5;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+#answer ul,
+#answer ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
