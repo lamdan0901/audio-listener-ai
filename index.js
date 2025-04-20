@@ -42,7 +42,7 @@ process.on("SIGTERM", () => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
   if (!fs.existsSync("audio")) fs.mkdirSync("audio", { recursive: true });
 
   checkFFmpegAvailability();

@@ -34,13 +34,55 @@
       </select>
     </div>
 
+    <div id="question-context-selection">
+      <strong>Question Context:</strong>
+      <select name="questionContext">
+        <option value="general" selected>
+          General about frontend development
+        </option>
+        <option value="html">HTML</option>
+        <option value="css">CSS</option>
+        <option value="javascript">JavaScript</option>
+        <option value="typescript">TypeScript</option>
+        <option value="reactjs">React.js</option>
+        <option value="nextjs">Next.js</option>
+        <option value="interview">General interview question</option>
+      </select>
+    </div>
+
+    <div id="follow-up-selection">
+      <label>
+        <input
+          type="checkbox"
+          name="isFollowUp"
+          id="isFollowUpCheckbox"
+          disabled
+        />
+        Ask a follow-up question
+      </label>
+    </div>
+
     <div class="status idle" id="status">Status: Idle</div>
     <div id="loading" class="status loading">
       <div class="loader"></div>
-      Processing your question...
+      <span>Processing your question...</span>
+    </div>
+
+    <div id="recording-instructions">
+      <small
+        >You can ask multiple questions in a single recording session. Just
+        speak clearly with short pauses between questions.</small
+      >
     </div>
 
     <button onclick="toggleRecording()" id="toggleBtn">Start Listening</button>
+    <button onclick="retryTranscription()" id="retryBtn" disabled>
+      Try Different Recognition
+    </button>
+    <button onclick="processWithGemini()" id="geminiBtn" disabled>
+      Try Gemini AI
+    </button>
+    <button onclick="cancelRequest()" id="cancelBtn" disabled>Cancel</button>
 
     <div id="question" style="margin-top: 20px"></div>
     <div id="answer"></div>

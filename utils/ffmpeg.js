@@ -9,7 +9,7 @@ function getFfmpegArgs(outputFile, options = {}) {
   const args = ["-y", "-hide_banner"];
   // Default options with fallbacks
   const settings = {
-    duration: options.duration || 30,
+    duration: options.duration || 90,
     speechSpeed: options.speechSpeed || "normal",
   };
 
