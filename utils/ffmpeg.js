@@ -1,6 +1,8 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { tryCatch } = require("../lib/tryCatch");
+const { cleanupAudioFiles } = require("./audio-processor");
 
 /**
  * Get FFmpeg command arguments based on platform
@@ -93,54 +95,45 @@ function getFfmpegArgs(outputFile, options = {}) {
  * Check if FFmpeg is available in the system
  */
 function checkFFmpegAvailability() {
-  try {
-    const result = spawn("ffmpeg", ["-version"]);
+  return tryCatch(
+    new Promise((resolve, reject) => {
+      const result = spawn("ffmpeg", ["-version"]);
 
-    result.on("error", (err) => {
-      console.error("FFmpeg not available:", err.message);
+      result.on("error", (err) => {
+        console.error("FFmpeg not available:", err.message);
+        console.error(
+          "Please ensure FFmpeg is installed and available in your PATH"
+        );
+        process.exit(1);
+      });
+
+      result.stderr.on("data", (data) => {
+        console.error(`FFmpeg check stderr: ${data}`);
+      });
+
+      result.stdout.on("data", (data) => {
+        console.log(`FFmpeg available: ${data.toString().split("\n")[0]}`);
+        resolve(true);
+      });
+
+      result.on("close", (code) => {
+        if (code === 0) {
+          resolve(true);
+        } else {
+          reject(new Error(`FFmpeg check exited with code ${code}`));
+        }
+      });
+    })
+  ).then((result) => {
+    if (result.error) {
+      console.error("FFmpeg check failed:", result.error.message);
       console.error(
         "Please ensure FFmpeg is installed and available in your PATH"
       );
       process.exit(1);
-    });
-
-    result.stderr.on("data", (data) => {
-      console.error(`FFmpeg check stderr: ${data}`);
-    });
-
-    result.stdout.on("data", (data) => {
-      console.log(`FFmpeg available: ${data.toString().split("\n")[0]}`);
-    });
-
-    return true;
-  } catch (err) {
-    console.error("FFmpeg check failed:", err.message);
-    console.error(
-      "Please ensure FFmpeg is installed and available in your PATH"
-    );
-    process.exit(1);
-  }
-}
-
-/**
- * Delete any temporary audio files
- */
-function cleanupAudioFiles(audioDir) {
-  if (fs.existsSync(audioDir)) {
-    try {
-      const files = fs.readdirSync(audioDir);
-      files.forEach((file) => {
-        try {
-          fs.unlinkSync(path.join(audioDir, file));
-        } catch (err) {
-          console.error(`Failed to delete file ${file}:`, err);
-        }
-      });
-      console.log("Temporary audio files cleaned up");
-    } catch (err) {
-      console.error("Failed to read audio directory:", err);
     }
-  }
+    return result.data;
+  });
 }
 
 module.exports = {

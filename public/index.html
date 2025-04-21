@@ -50,16 +50,14 @@
       </select>
     </div>
 
-    <div id="follow-up-selection">
-      <label>
-        <input
-          type="checkbox"
-          name="isFollowUp"
-          id="isFollowUpCheckbox"
-          disabled
-        />
-        Ask a follow-up question
-      </label>
+    <div id="custom-context-container">
+      <strong>Custom Context:</strong>
+      <textarea
+        id="customContextInput"
+        name="customContext"
+        placeholder="Add custom instructions for AI (will be applied to every response)"
+        rows="3"
+      ></textarea>
     </div>
 
     <div class="status idle" id="status">Status: Idle</div>
@@ -75,6 +73,18 @@
       >
     </div>
 
+    <div id="follow-up-selection">
+      <label>
+        <input
+          type="checkbox"
+          name="isFollowUp"
+          id="isFollowUpCheckbox"
+          disabled
+        />
+        Ask a follow-up question
+      </label>
+    </div>
+
     <button onclick="toggleRecording()" id="toggleBtn">Start Listening</button>
     <button onclick="retryTranscription()" id="retryBtn" disabled>
       Try Different Recognition
@@ -86,6 +96,48 @@
 
     <div id="question" style="margin-top: 20px"></div>
     <div id="answer"></div>
+
+    <div
+      id="history-section"
+      style="margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px"
+    >
+      <h2>Saved Questions</h2>
+      <div id="history-controls">
+        <button onclick="toggleHistoryPanel()" id="historyToggleBtn">
+          Show History
+        </button>
+        <button onclick="clearAllHistory()" id="clearHistoryBtn">
+          Clear All History
+        </button>
+        <button
+          onclick="downloadCurrentHistory()"
+          id="downloadHistoryBtn"
+          style="display: none"
+        >
+          Download
+        </button>
+        <select id="historyDateSelect" style="display: none">
+          <option value="">Select a date...</option>
+        </select>
+      </div>
+      <div id="history-panel" style="display: none; margin-top: 20px">
+        <div
+          id="history-container"
+          style="display: flex; flex-direction: column; gap: 20px"
+        >
+          <div id="history-list"></div>
+          <div
+            id="history-detail"
+            style="
+              display: none;
+              padding: 10px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+            "
+          ></div>
+        </div>
+      </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>

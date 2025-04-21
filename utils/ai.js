@@ -1,364 +1,174 @@
 const fs = require("fs");
-const speech = require("@google-cloud/speech");
+const { HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
+const { tryCatch } = require("../lib/tryCatch");
 const {
-  GoogleGenerativeAI,
-  HarmCategory,
-  HarmBlockThreshold,
-} = require("@google/generative-ai");
+  validateAndReadAudioFile,
+  transcribeAudio,
+  processAudioGeneric,
+} = require("./audio-processor");
+const { createGenAIClient, getGeminiModel } = require("../lib/ai-client");
 
-// Initialize Google clients
-const speechClient = new speech.SpeechClient();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize Google AI client
+const genAI = createGenAIClient(process.env.GEMINI_API_KEY);
 
 /**
- * Transcribe audio file using Google Speech-to-Text
+ * Gets context-specific prompt text based on the question context
+ * @param {string} questionContext - Context category for the question
+ * @param {boolean} isAudioFormat - Whether to use shorter format for audio processing
+ * @returns {string} - The context-specific prompt text
  */
-async function transcribeAudio(
-  filePath,
-  languageCode,
-  options = {},
-  retries = 3
+function getContextPrompt(questionContext = "general", isAudioFormat = false) {
+  const contextMap = {
+    html: {
+      standard:
+        "Your answer should focus on HTML concepts, best practices, and standards.",
+      audio: "Focus on HTML concepts, best practices, and standards.",
+    },
+    css: {
+      standard:
+        "Your answer should focus on CSS concepts, styling techniques, and best practices.",
+      audio: "Focus on CSS concepts, styling techniques, and best practices.",
+    },
+    javascript: {
+      standard:
+        "Your answer should focus on JavaScript language concepts, features, and best practices.",
+      audio:
+        "Focus on JavaScript language concepts, features, and best practices.",
+    },
+    typescript: {
+      standard:
+        "Your answer should focus on TypeScript language concepts, features, type system, and best practices.",
+      audio:
+        "Focus on TypeScript language concepts, features, type system, and best practices.",
+    },
+    reactjs: {
+      standard:
+        "Your answer should focus on React.js concepts, components, hooks, and best practices.",
+      audio:
+        "Focus on React.js concepts, components, hooks, and best practices.",
+    },
+    nextjs: {
+      standard:
+        "Your answer should focus on Next.js framework concepts, features, and best practices.",
+      audio:
+        "Focus on Next.js framework concepts, features, and best practices.",
+    },
+    interview: {
+      standard:
+        "Your answer should be formatted as a concise interview response, highlighting key points clearly.",
+      audio:
+        "Format your response as a concise interview answer, highlighting key points clearly.",
+    },
+    general: {
+      standard:
+        "Your answer should focus on general frontend development concepts and best practices.",
+      audio:
+        "Focus on general frontend development concepts and best practices.",
+    },
+  };
+
+  const format = isAudioFormat ? "audio" : "standard";
+  return (contextMap[questionContext] || contextMap.general)[format];
+}
+
+/**
+ * Builds a complete prompt for Gemini based on inputs
+ * @param {string} question - The question to answer
+ * @param {string} lang - Language code (e.g., 'en' or 'vi')
+ * @param {string} contextPrompt - Context-specific prompt
+ * @param {string} previousQuestion - Previous question for follow-ups
+ * @param {string} customContext - Custom context provided by user
+ * @returns {string} - Complete prompt
+ */
+function buildPrompt(
+  question,
+  lang,
+  contextPrompt,
+  previousQuestion = null,
+  customContext = ""
 ) {
-  try {
-    if (!filePath || !fs.existsSync(filePath)) {
-      throw new Error("Audio file not found");
-    }
+  // Add previous question context if this is a follow-up
+  let followUpContext = "";
+  if (previousQuestion) {
+    followUpContext = `This is a follow-up question. Previous question was: "${previousQuestion}". `;
+  }
 
-    const fileStats = fs.statSync(filePath);
-    if (fileStats.size === 0) {
-      throw new Error("Audio file is empty");
-    }
+  // Add custom context if provided
+  let userCustomContext = "";
+  if (customContext && customContext.trim() !== "") {
+    userCustomContext = `${customContext.trim()} `;
+  }
 
-    if (fileStats.size < 1000) {
-      // If file is suspiciously small (less than 1KB)
-      console.warn(
-        `Warning: Audio file is very small (${fileStats.size} bytes)`
-      );
-    }
+  // Base completion text
+  const completionText = `Answer the following question concisely using Markdown formatting for better readability: ${question}. Use headings, lists, and code blocks where appropriate.`;
 
-    const audioBytes = fs.readFileSync(filePath).toString("base64");
-    console.log(
-      `Attempting transcription for file size: ${audioBytes.length} bytes`
-    );
-
-    if (audioBytes.length < 100) {
-      // Extremely small base64 data
-      throw new Error(
-        "Audio file contains insufficient data for transcription"
-      );
-    }
-
-    // Set up speech recognition config based on speech speed
-    const speechSpeed = options.speechSpeed || "normal";
-    const isRetryAttempt = options.retryAttempt || false;
-    const attemptNumber = options.attemptNumber || 0;
-    console.log(
-      `Using speech speed setting: ${speechSpeed}, Retry attempt: ${isRetryAttempt}, Attempt #: ${attemptNumber}`
-    );
-
-    // Configure speech recognition based on our settings
-    const speechConfig = {
-      encoding: "LINEAR16",
-      sampleRateHertz: speechSpeed === "fast" ? 32000 : 16000,
-      enableAutomaticPunctuation: true,
-      languageCode,
-      useEnhanced: true, // Use enhanced model for better results
-      enableWordTimeOffsets: true, // Add word time offsets to help with segmentation
-      maxAlternatives: 1, // We only need the top alternative
-      enableSeparateRecognitionPerChannel: false,
-      diarizationConfig: {
-        enableSpeakerDiarization: false,
-      },
-      model: "latest_long", // Use the latest long model which is better for multi-utterance
-    };
-
-    // Apply very different settings based on retry attempt to get varied results
-    if (isRetryAttempt) {
-      console.log(`Retry attempt #${attemptNumber} - Using different strategy`);
-
-      // If useSimpleSettings flag is set, use minimal configuration to avoid API errors
-      if (options.useSimpleSettings) {
-        console.log(
-          "Using simplified speech recognition settings to avoid API errors"
-        );
-        // Override with the most basic settings that won't cause API issues
-        speechConfig.model = "default";
-        speechConfig.useEnhanced = false;
-
-        // Remove any advanced settings that might cause API errors
-        delete speechConfig.enableWordConfidence;
-        delete speechConfig.enableSpokenPunctuation;
-
-        console.log(
-          "Using simple speech config:",
-          JSON.stringify(speechConfig)
-        );
-      }
-      // Use different models and settings for different retry attempts
-      else if (attemptNumber % 3 === 0) {
-        // Strategy 1: Use phone call model (good for lower quality audio)
-        speechConfig.model = "phone_call";
-        speechConfig.useEnhanced = true;
-        speechConfig.audioChannelCount = 1;
-        console.log(
-          "Retry strategy: Using phone_call model for potentially noisy audio"
-        );
-      } else if (attemptNumber % 3 === 1) {
-        // Strategy 2: Try video model with different settings
-        speechConfig.model = "video";
-        speechConfig.enableAutomaticPunctuation = true;
-        speechConfig.enableWordTimeOffsets = true;
-        speechConfig.useEnhanced = true;
-        // Add speech adaptation with higher boost
-        speechConfig.speechContexts = [
-          {
-            phrases: [],
-            boost: 20, // Very high boost
-          },
-        ];
-        console.log("Retry strategy: Using video model with high boost");
-      } else {
-        // Strategy 3: Use command and search model which is good for short phrases
-        speechConfig.model = "command_and_search";
-        speechConfig.useEnhanced = true;
-        console.log("Retry strategy: Using command_and_search model");
-      }
-    }
-    // Set model based on retry status
-    else if (isRetryAttempt) {
-      // If this is a retry attempt, use more advanced models
-      speechConfig.model = options.model || "latest_long"; // Use a more accurate model
-      speechConfig.useEnhanced = true;
-
-      // Use more aggressive settings for retry attempts
-      speechConfig.enableAutomaticPunctuation = true;
-      speechConfig.enableWordConfidence = true;
-
-      // Fix: enableSpokenPunctuation expects a boolean, not just an existence of the property
-      if (
-        speechConfig.model === "latest_long" ||
-        speechConfig.model === "video"
-      ) {
-        speechConfig.enableSpokenPunctuation = true;
-      }
-
-      console.log("Using enhanced transcription settings for retry attempt");
-    } else {
-      // Use standard model for initial attempts
-      speechConfig.model = "default";
-    }
-
-    // Add speech adaptation for different speech speeds
-    if (speechSpeed === "fast" && !isRetryAttempt) {
-      speechConfig.speechContexts = [
-        {
-          phrases: [], // Could add domain-specific terms here
-          boost: isRetryAttempt ? 15 : 10, // Higher boost on retry
-        },
-      ];
-    } else if (speechSpeed === "slow" && !isRetryAttempt) {
-      // For slow speech, we can use more conservative settings
-      speechConfig.enableWordTimeOffsets = true; // Get word timestamps
-    }
-
-    console.log(`Using speech model: ${speechConfig.model}`);
-
-    const [response] = await speechClient.recognize({
-      audio: { content: audioBytes },
-      config: speechConfig,
-    });
-
-    if (!response.results?.length) {
-      console.log(
-        "No transcription results - response:",
-        JSON.stringify(response, null, 2)
-      );
-      throw new Error("No speech detected in the audio");
-    }
-
-    // Concatenate all results instead of just taking the first one
-    // This ensures we capture all questions/utterances in the audio
-    let transcript = "";
-    response.results.forEach((result, index) => {
-      if (result.alternatives && result.alternatives.length > 0) {
-        const segmentText = result.alternatives[0].transcript;
-        transcript += (index > 0 ? " " : "") + segmentText;
-        console.log(`Speech segment ${index + 1}:`, segmentText);
-      }
-    });
-
-    console.log("Final concatenated transcription:", transcript);
-    return transcript;
-  } catch (error) {
-    console.error("Transcription attempt failed:", error.message);
-    if (retries > 0) {
-      console.log(`Retrying transcription (${retries} attempts left)...`);
-
-      // Modify options for retry
-      const retryOptions = {
-        ...options,
-        retryAttempt: true, // Mark as a retry attempt
-        attemptNumber: (options.attemptNumber || 0) + 1, // Increment attempt counter
-      };
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      return transcribeAudio(filePath, languageCode, retryOptions, retries - 1);
-    }
-    throw error;
+  // Build final prompt based on language
+  if (lang === "vi") {
+    return `Question will be in Vietnamese and answer must be in Vietnamese. ${contextPrompt} ${followUpContext}${userCustomContext}${completionText}`;
+  } else {
+    return `${contextPrompt} ${followUpContext}${userCustomContext}${completionText}`;
   }
 }
 
 /**
- * Generate answer using Gemini model
+ * Gets Gemini model instance with appropriate configuration
+ * @param {boolean} withSafetySettings - Whether to include safety settings
+ * @returns {Object} - Configured Gemini model instance
+ */
+function getConfiguredGeminiModel(withSafetySettings = false) {
+  return getGeminiModel(genAI, { withSafetySettings });
+}
+
+/**
+ * Generate answer using Gemini API
  */
 async function generateAnswer(
   question,
   lang,
   questionContext = "general",
   previousQuestion = null,
-  streaming = false
+  streaming = false,
+  customContext = ""
 ) {
-  if (streaming) {
-    return streamGeneratedAnswer(
-      question,
-      lang,
-      questionContext,
-      previousQuestion
-    );
+  const model = getConfiguredGeminiModel();
+  const contextPrompt = getContextPrompt(questionContext);
+  const prompt = buildPrompt(
+    question,
+    lang,
+    contextPrompt,
+    previousQuestion,
+    customContext
+  );
+
+  const result = await tryCatch(model.generateContent(prompt));
+
+  if (result.error) {
+    console.error("Error generating answer:", result.error);
+    throw result.error;
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
-  let prompt;
-
-  // Create context-specific prompt additions
-  let contextPrompt = "";
-  switch (questionContext) {
-    case "html":
-      contextPrompt =
-        "Your answer should focus on HTML concepts, best practices, and standards.";
-      break;
-    case "css":
-      contextPrompt =
-        "Your answer should focus on CSS concepts, styling techniques, and best practices.";
-      break;
-    case "javascript":
-      contextPrompt =
-        "Your answer should focus on JavaScript language concepts, features, and best practices.";
-      break;
-    case "typescript":
-      contextPrompt =
-        "Your answer should focus on TypeScript language concepts, features, type system, and best practices.";
-      break;
-    case "reactjs":
-      contextPrompt =
-        "Your answer should focus on React.js concepts, components, hooks, and best practices.";
-      break;
-    case "nextjs":
-      contextPrompt =
-        "Your answer should focus on Next.js framework concepts, features, and best practices.";
-      break;
-    case "interview":
-      contextPrompt =
-        "Your answer should be formatted as a concise interview response, highlighting key points clearly.";
-      break;
-    default:
-      contextPrompt =
-        "Your answer should focus on general frontend development concepts and best practices.";
-  }
-
-  // Add previous question context if this is a follow-up
-  let followUpContext = "";
-  if (previousQuestion) {
-    followUpContext = `This is a follow-up question. Previous question was: "${previousQuestion}". `;
-  }
-
-  if (lang === "vi") {
-    prompt =
-      `Question will be in Vietnamese and answer must be in Vietnamese. ` +
-      `${contextPrompt} ` +
-      `${followUpContext}` +
-      `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
-      `Use headings, lists, and code blocks where appropriate.`;
-  } else {
-    prompt =
-      `${contextPrompt} ` +
-      `${followUpContext}` +
-      `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
-      `Use headings, lists, and code blocks where appropriate.`;
-  }
-
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  return result.data.response.text();
 }
 
 /**
- * Stream generated answer using Gemini model
+ * Stream generated answer using Gemini API
  */
 async function* streamGeneratedAnswer(
   question,
   lang,
   questionContext = "general",
-  previousQuestion = null
+  previousQuestion = null,
+  customContext = ""
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
-  let prompt;
-
-  // Create context-specific prompt additions
-  let contextPrompt = "";
-  switch (questionContext) {
-    case "html":
-      contextPrompt =
-        "Your answer should focus on HTML concepts, best practices, and standards.";
-      break;
-    case "css":
-      contextPrompt =
-        "Your answer should focus on CSS concepts, styling techniques, and best practices.";
-      break;
-    case "javascript":
-      contextPrompt =
-        "Your answer should focus on JavaScript language concepts, features, and best practices.";
-      break;
-    case "typescript":
-      contextPrompt =
-        "Your answer should focus on TypeScript language concepts, features, type system, and best practices.";
-      break;
-    case "reactjs":
-      contextPrompt =
-        "Your answer should focus on React.js concepts, components, hooks, and best practices.";
-      break;
-    case "nextjs":
-      contextPrompt =
-        "Your answer should focus on Next.js framework concepts, features, and best practices.";
-      break;
-    case "interview":
-      contextPrompt =
-        "Your answer should be formatted as a concise interview response, highlighting key points clearly.";
-      break;
-    default:
-      contextPrompt =
-        "Your answer should focus on general frontend development concepts and best practices.";
-  }
-
-  // Add previous question context if this is a follow-up
-  let followUpContext = "";
-  if (previousQuestion) {
-    followUpContext = `This is a follow-up question. Previous question was: "${previousQuestion}". `;
-  }
-
-  if (lang === "vi") {
-    prompt =
-      `Question will be in Vietnamese and answer must be in Vietnamese. ` +
-      `${contextPrompt} ` +
-      `${followUpContext}` +
-      `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
-      `Use headings, lists, and code blocks where appropriate.`;
-  } else {
-    prompt =
-      `${contextPrompt} ` +
-      `${followUpContext}` +
-      `Answer the following question concisely using Markdown formatting for better readability: ${question}. ` +
-      `Use headings, lists, and code blocks where appropriate.`;
-  }
+  const model = getConfiguredGeminiModel();
+  const contextPrompt = getContextPrompt(questionContext);
+  const prompt = buildPrompt(
+    question,
+    lang,
+    contextPrompt,
+    previousQuestion,
+    customContext
+  );
 
   const result = await model.generateContentStream(prompt);
 
@@ -375,31 +185,14 @@ async function* streamGeneratedAnswer(
 async function processAudioWithGemini(
   filePath,
   lang = "en",
-  questionContext = "general"
+  questionContext = "general",
+  customContext = ""
 ) {
-  try {
+  return processAudioGeneric(filePath, async (audioBase64) => {
     console.log(`Processing audio directly with Gemini: ${filePath}`);
 
-    if (!filePath || !fs.existsSync(filePath)) {
-      throw new Error("Audio file not found");
-    }
-
-    // Read the audio file as binary data
-    const audioData = fs.readFileSync(filePath);
-
-    // Get the appropriate model
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash-001",
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-      ],
-    });
-
-    // Convert audio to base64
-    const audioBase64 = audioData.toString("base64");
+    // Get the appropriate model with safety settings
+    const model = getConfiguredGeminiModel(true);
 
     // Create parts array with the audio content
     const parts = [
@@ -411,49 +204,26 @@ async function processAudioWithGemini(
       },
     ];
 
-    // Create context-specific prompt additions
-    let contextPrompt = "";
-    switch (questionContext) {
-      case "html":
-        contextPrompt =
-          "Focus on HTML concepts, best practices, and standards.";
-        break;
-      case "css":
-        contextPrompt =
-          "Focus on CSS concepts, styling techniques, and best practices.";
-        break;
-      case "javascript":
-        contextPrompt =
-          "Focus on JavaScript language concepts, features, and best practices.";
-        break;
-      case "typescript":
-        contextPrompt =
-          "Focus on TypeScript language concepts, features, type system, and best practices.";
-        break;
-      case "reactjs":
-        contextPrompt =
-          "Focus on React.js concepts, components, hooks, and best practices.";
-        break;
-      case "nextjs":
-        contextPrompt =
-          "Focus on Next.js framework concepts, features, and best practices.";
-        break;
-      case "interview":
-        contextPrompt =
-          "Format your response as a concise interview answer, highlighting key points clearly.";
-        break;
-      default:
-        contextPrompt =
-          "Focus on general frontend development concepts and best practices.";
+    // Get context-specific prompt with audio format
+    const contextPrompt = getContextPrompt(questionContext, true);
+
+    // Add custom context if provided
+    let userCustomContext = "";
+    if (customContext && customContext.trim() !== "") {
+      userCustomContext = `${customContext.trim()} `;
     }
 
     // Add prompt text based on language
     let promptText = "";
     if (lang === "vi") {
-      promptText = `Đây là nội dung âm thanh. ${contextPrompt} Hãy trả lời nội dung câu hỏi trong đoạn âm thanh một cách ngắn gọn và rõ ràng bằng tiếng Việt. Sử dụng định dạng Markdown cho câu trả lời.`;
+      promptText = `Đây là nội dung âm thanh. ${contextPrompt} ${userCustomContext}
+      QUAN TRỌNG: Nếu có nhiều câu hỏi trong đoạn âm thanh, bạn PHẢI trả lời tất cả các câu hỏi theo thứ tự. Bạn PHẢI nêu rõ từng câu hỏi bằng cách viết "Câu hỏi 1: [nội dung câu hỏi]" trước khi trả lời. Nếu có nhiều câu hỏi, bạn phải liệt kê chúng theo định dạng "Câu hỏi 1: ...", "Câu hỏi 2: ...", v.v.
+      Sử dụng định dạng Markdown cho câu trả lời của bạn.`;
       parts.push({ text: promptText });
     } else {
-      promptText = `This is audio content. ${contextPrompt} Please respond to the question in the audio concisely and clearly. Use Markdown formatting for better readability.`;
+      promptText = `This is audio content. ${contextPrompt} ${userCustomContext}
+      IMPORTANT: If there are multiple questions in the audio, you MUST respond to ALL of them in order. You MUST clearly identify each question by writing "Question 1: [question content]" before answering it. If there are multiple questions, you must list them in the format "Question 1: ...", "Question 2: ...", etc.
+      Use Markdown formatting for better readability in your answers.`;
       parts.push({ text: promptText });
     }
 
@@ -462,7 +232,6 @@ async function processAudioWithGemini(
       contents: [{ role: "user", parts }],
     });
 
-    // Extract the transcript from the response
     const responseText = result.response.text();
 
     // For direct Gemini processing, we'll extract both the transcript and the answer
@@ -470,29 +239,70 @@ async function processAudioWithGemini(
     let transcript = "";
     let answer = responseText;
 
-    // Try to extract the question/transcript from the response
-    const transcriptMatch = responseText.match(
-      /question[s]?:?\s*[""']?(.*?)[""']?[\n\r]/i
-    );
-    if (transcriptMatch && transcriptMatch[1]) {
-      transcript = transcriptMatch[1].trim();
-      console.log("Extracted transcript from Gemini response:", transcript);
+    // Try to extract questions - look for patterns that indicate multiple questions
+    const questionsPattern =
+      /(?:Question|Câu hỏi)\s*\d+\s*:\s*(.*?)(?=(?:Question|Câu hỏi)\s*\d+|[\n\r]|$)/gi;
+    const questionsMatches = [...responseText.matchAll(questionsPattern)];
+
+    if (questionsMatches.length > 0) {
+      // Multiple questions found, combine them
+      transcript = questionsMatches.map((match) => match[1].trim()).join(" | ");
+      console.log(
+        "Extracted multiple questions from Gemini response:",
+        transcript
+      );
     } else {
-      // If we can't extract the specific question, use the first line or paragraph
-      const firstLine = responseText.split(/[\n\r]/)[0];
-      if (firstLine && firstLine.length < 200) {
-        transcript = firstLine;
-        console.log("Using first line as transcript:", transcript);
+      // Try alternative patterns if the specific format wasn't found
+      const altPattern = /[""']([^""'\n]{5,})[""'](?:\?|\.)/g;
+      const altMatches = [...responseText.matchAll(altPattern)];
+
+      if (altMatches.length > 0) {
+        transcript = altMatches.map((match) => match[1].trim()).join(" | ");
+        console.log(
+          "Extracted questions using alternative pattern:",
+          transcript
+        );
       } else {
-        transcript = "Unable to extract specific question from audio";
+        // Try the "I heard you ask" pattern
+        const heardPattern =
+          /(?:I heard you ask|You asked)(?:[:\s]+)["']?([^"'\n.?]{5,}\??)['"]/gi;
+        const heardMatches = [...responseText.matchAll(heardPattern)];
+
+        if (heardMatches.length > 0) {
+          transcript = heardMatches.map((match) => match[1].trim()).join(" | ");
+          console.log(
+            "Extracted questions using 'heard you ask' pattern:",
+            transcript
+          );
+        } else {
+          // Try the simplest pattern - just looking for question mark
+          const simplePattern = /([^.!?\n]{10,}\?)/g;
+          const simpleMatches = [...responseText.matchAll(simplePattern)];
+
+          if (simpleMatches.length > 0) {
+            transcript = simpleMatches
+              .map((match) => match[1].trim())
+              .join(" | ");
+            console.log(
+              "Extracted questions using simple pattern:",
+              transcript
+            );
+          } else {
+            // If we can't extract the specific question, use the first line or paragraph
+            const firstLine = responseText.split(/[\n\r]/)[0];
+            if (firstLine && firstLine.length < 200) {
+              transcript = firstLine;
+              console.log("Using first line as transcript:", transcript);
+            } else {
+              transcript = "Unable to extract specific question from audio";
+            }
+          }
+        }
       }
     }
 
     return { transcript, answer };
-  } catch (error) {
-    console.error("Error processing audio with Gemini:", error);
-    throw error;
-  }
+  });
 }
 
 module.exports = {

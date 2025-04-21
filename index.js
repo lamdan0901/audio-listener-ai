@@ -1,4 +1,7 @@
 require("dotenv").config();
+const { setupConsoleTimestamps } = require("./utils/logger");
+setupConsoleTimestamps();
+
 const express = require("express");
 const socketIo = require("socket.io");
 const path = require("path");
