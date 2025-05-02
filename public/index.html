@@ -37,40 +37,31 @@
     <div id="question-context-selection">
       <strong>Question Context:</strong>
       <select name="questionContext">
+        <option value="interview">General interview question</option>
         <option value="general" selected>
           General about frontend development
         </option>
-        <option value="html">HTML</option>
-        <option value="css">CSS</option>
-        <option value="javascript">JavaScript</option>
+        <option value="html/css/javascript">HTML/CSS/JavaScript</option>
         <option value="typescript">TypeScript</option>
         <option value="reactjs">React.js</option>
         <option value="nextjs">Next.js</option>
-        <option value="interview">General interview question</option>
       </select>
     </div>
 
-    <div id="custom-context-container">
-      <strong>Custom Context:</strong>
+    <details id="custom-context-container">
+      <summary><strong>Custom Context</strong></summary>
       <textarea
         id="customContextInput"
         name="customContext"
         placeholder="Add custom instructions for AI (will be applied to every response)"
         rows="3"
       ></textarea>
-    </div>
+    </details>
 
     <div class="status idle" id="status">Status: Idle</div>
     <div id="loading" class="status loading">
       <div class="loader"></div>
       <span>Processing your question...</span>
-    </div>
-
-    <div id="recording-instructions">
-      <small
-        >You can ask multiple questions in a single recording session. Just
-        speak clearly with short pauses between questions.</small
-      >
     </div>
 
     <div id="follow-up-selection">
@@ -90,7 +81,7 @@
       Try Different Recognition
     </button>
     <button onclick="processWithGemini()" id="geminiBtn" disabled>
-      Try Gemini AI
+      Try Gemini AI directly
     </button>
     <button onclick="cancelRequest()" id="cancelBtn" disabled>Cancel</button>
 

@@ -147,12 +147,12 @@ function retryTranscription() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      audioFile: lastAudioFile,
-      language: lang,
-      speechSpeed: speechSpeed,
-      questionContext: questionContext,
-      customContext: customContext,
-      isFollowUp: isFollowUp,
+      audioFile,
+      language,
+      speechSpeed,
+      questionContext,
+      customContext,
+      isFollowUp,
     }),
   })
     .then((response) => {

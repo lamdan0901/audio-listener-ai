@@ -3,7 +3,7 @@ let currentOutputFile = null;
 let lastProcessedFile = null;
 let retryCount = 0;
 let isProcessingCancelled = false;
-let lastQuestion = null; // Store the last question for follow-up context
+let lastQuestion = null;
 
 /**
  * Common functions for request handling
@@ -11,13 +11,13 @@ let lastQuestion = null; // Store the last question for follow-up context
 
 /**
  * Prepares common parameters from request body
- * @param {Object} reqBody - Request body from Express
+ * @param {Object} reqBody - Request body
  * @returns {Object} - Normalized parameters
  */
 function prepareRequestParams(reqBody) {
   return {
-    lang: reqBody.language === "en" ? "en" : "vi",
-    languageCode: reqBody.language === "en" ? "en-US" : "vi-VN",
+    lang: reqBody.language, // "en" or "vi"
+    languageCode: reqBody.language, // "en" or "vi"
     speechSpeed: reqBody.speechSpeed || "normal",
     questionContext: reqBody.questionContext || "general",
     customContext: reqBody.customContext || "",
@@ -54,9 +54,10 @@ function handleFollowUpLogic(isFollowUp, transcript, storeQuestion = true) {
 
 // Handle the case where no speech was detected
 function handleEmptyTranscript(languageCode, audioFile) {
-  const apology = languageCode.startsWith("vi")
-    ? "Xin lỗi, tôi không nghe rõ. Vui lòng thử lại."
-    : "Sorry, I didn't catch that. Please try again.";
+  const apology =
+    languageCode === "vi"
+      ? "Xin lỗi, tôi không nghe rõ. Vui lòng thử lại."
+      : "Sorry, I didn't catch that. Please try again.";
 
   return {
     transcript: "",

@@ -13,21 +13,11 @@ const genAI = createGenAIClient(process.env.GEMINI_API_KEY);
  */
 function getContextPrompt(questionContext = "general", isAudioFormat = false) {
   const contextMap = {
-    html: {
+    "html/css/javascript": {
       standard:
-        "Your answer should focus on HTML concepts, best practices, and standards.",
-      audio: "Focus on HTML concepts, best practices, and standards.",
-    },
-    css: {
-      standard:
-        "Your answer should focus on CSS concepts, styling techniques, and best practices.",
-      audio: "Focus on CSS concepts, styling techniques, and best practices.",
-    },
-    javascript: {
-      standard:
-        "Your answer should focus on JavaScript language concepts, features, and best practices.",
+        "Your answer should focus on HTML, CSS or Javascript concepts, best practices, and standards.",
       audio:
-        "Focus on JavaScript language concepts, features, and best practices.",
+        "Focus on HTML, CSS or Javascript concepts, best practices, and standards.",
     },
     typescript: {
       standard:
