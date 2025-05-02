@@ -49,9 +49,7 @@ const transcriptionController = {
     const params = baseController.prepareRequestParams(req.body);
 
     console.log(
-      `Stop recording request received. Language: ${
-        params.lang
-      }, Speech speed: ${params.speechSpeed}, Context: ${
+      `Stop recording request received. Language: ${params.lang}, Context: ${
         params.questionContext
       }, Custom Context: ${
         params.customContext ? "provided" : "none"
@@ -93,7 +91,6 @@ const transcriptionController = {
 
         // Process the audio to text with appropriate options
         const transcriptionOptions = {
-          speechSpeed: params.speechSpeed,
           questionContext: params.questionContext,
           customContext: params.customContext,
           isFollowUp: params.isFollowUp,
@@ -183,7 +180,6 @@ const transcriptionController = {
 
         // Use different transcription strategies based on retry count
         const transcriptionOptions = {
-          speechSpeed: params.speechSpeed,
           questionContext: params.questionContext,
           retryAttempt: true, // Flag this as a retry attempt
           attemptNumber: retryCount,

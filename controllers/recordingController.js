@@ -191,7 +191,6 @@ const recordingController = {
         // Start FFmpeg with options from the request
         const options = {
           duration: req.body.duration || 30,
-          speechSpeed: req.body.speechSpeed || "normal",
         };
 
         startFFmpegProcess(io, options);

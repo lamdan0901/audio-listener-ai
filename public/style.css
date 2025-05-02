@@ -51,18 +51,6 @@ button {
   margin-right: 1em;
 }
 
-#speech-speed-selection {
-  margin-bottom: 1em;
-}
-
-#speech-speed-selection select {
-  padding: 6px;
-  font-size: 16px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  margin-left: 5px;
-}
-
 #question-context-selection {
   margin-bottom: 1em;
 }

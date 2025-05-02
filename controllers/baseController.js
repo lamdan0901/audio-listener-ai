@@ -18,7 +18,6 @@ function prepareRequestParams(reqBody) {
   return {
     lang: reqBody.language, // "en" or "vi"
     languageCode: reqBody.language, // "en" or "vi"
-    speechSpeed: reqBody.speechSpeed || "normal",
     questionContext: reqBody.questionContext || "general",
     customContext: reqBody.customContext || "",
     isFollowUp: reqBody.isFollowUp === true,

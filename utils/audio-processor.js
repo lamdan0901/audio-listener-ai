@@ -46,12 +46,11 @@ async function transcribeAudio(
 
       console.log(`Attempting transcription for file: ${filePath}`);
 
-      // Set up speech recognition config based on speech speed
-      const speechSpeed = options.speechSpeed || "normal";
+      // Set up speech recognition config
       const isRetryAttempt = options.retryAttempt || false;
       const attemptNumber = options.attemptNumber || 0;
       console.log(
-        `Using speech speed setting: ${speechSpeed}, Retry attempt: ${isRetryAttempt}, Attempt #: ${attemptNumber}`
+        `Retry attempt: ${isRetryAttempt}, Attempt #: ${attemptNumber}`
       );
 
       // Configure AssemblyAI transcription parameters

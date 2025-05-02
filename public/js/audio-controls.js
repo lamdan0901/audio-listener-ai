@@ -14,9 +14,6 @@ function toggleRecording() {
   const cancelBtn = document.getElementById("cancelBtn");
   // grab the selected language each time
   const lang = document.querySelector('input[name="language"]:checked').value;
-  // get the selected speech speed
-  const speechSpeed =
-    document.querySelector('select[name="speechSpeed"]').value || "normal";
   // get the selected question context
   const questionContext =
     document.querySelector('select[name="questionContext"]').value || "general";
@@ -50,7 +47,6 @@ function toggleRecording() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: lang,
-        speechSpeed: speechSpeed,
         questionContext: questionContext,
         customContext: customContext,
         duration: 90, // Increase default recording duration to 90 seconds for multiple questions
@@ -70,7 +66,6 @@ function toggleRecording() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         language: lang,
-        speechSpeed: speechSpeed,
         questionContext: questionContext,
         customContext: customContext,
         isFollowUp: isFollowUp,
@@ -103,9 +98,6 @@ function retryTranscription() {
 
   // grab the selected language
   const lang = document.querySelector('input[name="language"]:checked').value;
-  // get the selected speech speed
-  const speechSpeed =
-    document.querySelector('select[name="speechSpeed"]').value || "normal";
   // get the selected question context
   const questionContext =
     document.querySelector('select[name="questionContext"]').value || "general";
@@ -149,7 +141,6 @@ function retryTranscription() {
     body: JSON.stringify({
       audioFile,
       language,
-      speechSpeed,
       questionContext,
       customContext,
       isFollowUp,
