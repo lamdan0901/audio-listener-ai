@@ -1,5 +1,10 @@
 // Audio recording and processing functions
 
+/**
+ * Toggles the recording state on/off and updates the UI accordingly.
+ * Starts or stops audio recording, sends appropriate requests to the server,
+ * and manages UI elements based on the current recording state.
+ */
 function toggleRecording() {
   const btn = document.getElementById("toggleBtn");
   const status = document.getElementById("status");
@@ -80,6 +85,11 @@ function toggleRecording() {
   isRecording = !isRecording;
 }
 
+/**
+ * Retries transcription of the last recorded audio file with potentially different settings.
+ * Resets UI, disables relevant buttons, and sends a retry request to the server.
+ * This is useful when the initial transcription was incorrect or incomplete.
+ */
 function retryTranscription() {
   // Reset UI for new processing
   document.getElementById("question").innerHTML = "";
@@ -171,6 +181,11 @@ function retryTranscription() {
   }
 }
 
+/**
+ * Processes the last recorded audio with Gemini AI instead of standard transcription.
+ * Resets UI, captures the original question if available, and sends a request
+ * to process the audio with Gemini AI for enhanced results.
+ */
 function processWithGemini() {
   // Save the current question displayed in the UI if no originalQuestion is set
   if (!originalQuestion) {
@@ -272,7 +287,11 @@ function processWithGemini() {
   }
 }
 
-// Add a new function to cancel recording and processing
+/**
+ * Cancels the current recording or processing operation.
+ * Resets UI state, sends cancel request to server, and re-enables buttons.
+ * Also clears any results and resets animation state.
+ */
 function cancelRequest() {
   // Set the cancelled flag
   isCancelled = true;
@@ -320,8 +339,11 @@ function cancelRequest() {
   animationQueue = [];
 }
 
-// Helper function to update the follow-up checkbox state
-function updateFollowUpCheckbox(isFollowUp) {
+/**
+ * Updates the follow-up checkbox state based on whether there's a previous question.
+ * Enables or disables the checkbox appropriately and logs debugging information.
+ */
+function updateFollowUpCheckbox() {
   const followUpCheckbox = document.getElementById("isFollowUpCheckbox");
   if (followUpCheckbox) {
     // Enable the checkbox if we have a previous question

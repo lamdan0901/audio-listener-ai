@@ -4,7 +4,10 @@ let animationInProgress = false;
 let animationQueue = [];
 let streamedContent = ""; // Variable to accumulate streamed content
 
-// Reset animation state
+/**
+ * Resets all animation state variables to their initial values.
+ * Clears previous content, animation status, queue, and streamed content.
+ */
 function resetAnimationState() {
   previousContent = "";
   animationInProgress = false;
@@ -12,7 +15,13 @@ function resetAnimationState() {
   streamedContent = "";
 }
 
-// Animate text character by character
+/**
+ * Animates text character by character with a typewriter effect.
+ * @param {HTMLElement} element - The DOM element to animate text within
+ * @param {string} text - The complete text to animate
+ * @param {number} startIndex - The starting position in the text to animate from
+ * @param {Function} [callback] - Optional callback function to execute when animation completes
+ */
 function animateText(element, text, startIndex, callback) {
   if (startIndex < text.length) {
     // Calculate how many characters to add in this step (variable speed typing)
@@ -63,7 +72,11 @@ function animateText(element, text, startIndex, callback) {
   }
 }
 
-// Process the next animation in the queue
+/**
+ * Processes the next animation in the queue.
+ * Handles the animation flow and manages the animation state.
+ * Processes initial content differently from subsequent updates.
+ */
 function processNextAnimation() {
   if (animationQueue.length === 0) {
     animationInProgress = false;
@@ -119,7 +132,12 @@ function processNextAnimation() {
   }
 }
 
-// Update content with minimal DOM changes to reduce flashing
+/**
+ * Updates content with minimal DOM changes to reduce flashing.
+ * Intelligently updates only changed parts of the DOM.
+ * @param {HTMLElement} currentElement - The current DOM element to update
+ * @param {HTMLElement} newContentElement - The new content element with updated HTML
+ */
 function updateContentSmoothly(currentElement, newContentElement) {
   // Identify and update only the changed parts
   // This function tries to be smart about updating only what has changed
@@ -167,7 +185,12 @@ function updateContentSmoothly(currentElement, newContentElement) {
   appendCursor(currentElement);
 }
 
-// Special handling for code blocks to make them animate smoothly
+/**
+ * Special handling for code blocks to make them animate smoothly.
+ * Preserves scroll position when updating code blocks.
+ * @param {HTMLElement} currentBlock - The current code block element
+ * @param {HTMLElement} newBlock - The new code block with updated content
+ */
 function updateCodeBlock(currentBlock, newBlock) {
   // Preserve scroll position and other attributes
   const wasScrolled = currentBlock.scrollTop > 0;
@@ -182,7 +205,11 @@ function updateCodeBlock(currentBlock, newBlock) {
   }
 }
 
-// Add a blinking cursor at the end of the content
+/**
+ * Adds a blinking cursor at the end of the content.
+ * Finds the appropriate element to append the cursor to.
+ * @param {HTMLElement} element - The container element to add the cursor to
+ */
 function appendCursor(element) {
   // Remove any existing cursors
   const existingCursors = element.querySelectorAll(".typing-cursor");

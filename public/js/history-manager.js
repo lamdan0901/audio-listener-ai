@@ -3,14 +3,22 @@ const HISTORY_PREFIX = "ai_assistant_history_";
 let historyVisible = false;
 let selectedHistoryItemId = null;
 
-// Generate a date-based key for today's history
+/**
+ * Generates a date-based key for today's history storage.
+ * @returns {string} A key in the format "ai_assistant_history_YYYY-MM-DD"
+ */
 function getTodayHistoryKey() {
   const today = new Date();
   const dateStr = today.toISOString().split("T")[0]; // Format: YYYY-MM-DD
   return `${HISTORY_PREFIX}${dateStr}`;
 }
 
-// Save question and answer to local storage
+/**
+ * Saves a question and answer pair to local storage.
+ * Organizes history by date and prevents duplicate entries.
+ * @param {string} question - The question to save
+ * @param {string} answer - The answer to save
+ */
 function saveToHistory(question, answer) {
   try {
     if (!question || !answer) return;
@@ -82,7 +90,11 @@ function saveToHistory(question, answer) {
   }
 }
 
-// Load all available history dates
+/**
+ * Loads all available history dates into the date selector dropdown.
+ * Preserves selection if possible, otherwise defaults to today's date.
+ * @returns {boolean} True if any history exists, false otherwise
+ */
 function loadHistoryDates() {
   const dateSelect = document.getElementById("historyDateSelect");
   const currentValue = dateSelect.value;
@@ -133,7 +145,11 @@ function loadHistoryDates() {
   return historyKeys.length > 0;
 }
 
-// Load history for a specific date
+/**
+ * Loads and displays history entries for a specific date.
+ * Sorts entries from newest to oldest and creates clickable elements for each.
+ * @param {string} dateKey - The localStorage key for the date to load
+ */
 function loadHistoryForDate(dateKey) {
   const historyList = document.getElementById("history-list");
   historyList.innerHTML = "";
@@ -179,7 +195,12 @@ function loadHistoryForDate(dateKey) {
   });
 }
 
-// View a specific history item
+/**
+ * Displays the full details of a specific history item in the detail panel.
+ * Highlights the selected item in the list and formats content with Markdown.
+ * @param {number} id - The ID of the history item to view
+ * @param {string} dateKey - The localStorage key for the date containing the item
+ */
 function viewHistoryItem(id, dateKey) {
   const history = JSON.parse(localStorage.getItem(dateKey) || "[]");
   const entry = history.find((item) => item.id === id);
@@ -220,7 +241,13 @@ function viewHistoryItem(id, dateKey) {
   }
 }
 
-// Delete a specific history item
+/**
+ * Deletes a specific history item after confirmation.
+ * Updates localStorage and refreshes the UI accordingly.
+ * @param {number} id - The ID of the history item to delete
+ * @param {string} dateKey - The localStorage key for the date containing the item
+ * @param {Event} event - The click event, used to prevent event bubbling
+ */
 function deleteHistoryItem(id, dateKey, event) {
   // Prevent the click from triggering the parent element's click event
   event.stopPropagation();
@@ -260,7 +287,10 @@ function deleteHistoryItem(id, dateKey, event) {
   }
 }
 
-// Clear all history after confirmation
+/**
+ * Clears all history data after user confirmation.
+ * Removes all history-related items from localStorage and resets the UI.
+ */
 function clearAllHistory() {
   if (
     !confirm(
@@ -291,7 +321,10 @@ function clearAllHistory() {
   loadHistoryDates();
 }
 
-// Toggle the history panel visibility
+/**
+ * Toggles the visibility of the history panel.
+ * Loads and displays history data when the panel is shown.
+ */
 function toggleHistoryPanel() {
   const historyPanel = document.getElementById("history-panel");
   const dateSelect = document.getElementById("historyDateSelect");
@@ -346,7 +379,10 @@ function toggleHistoryPanel() {
   }
 }
 
-// Handle date selection change
+/**
+ * Handles the change event for the history date selector.
+ * Loads history for the selected date and resets the detail view.
+ */
 function onHistoryDateChange() {
   const dateSelect = document.getElementById("historyDateSelect");
   const dateKey = dateSelect.value;
@@ -361,7 +397,10 @@ function onHistoryDateChange() {
   selectedHistoryItemId = null;
 }
 
-// Download current history selection
+/**
+ * Downloads the currently selected history date as a JSON file.
+ * Validates that a date is selected before proceeding.
+ */
 function downloadCurrentHistory() {
   const dateSelect = document.getElementById("historyDateSelect");
   if (dateSelect && dateSelect.value) {
@@ -371,7 +410,11 @@ function downloadCurrentHistory() {
   }
 }
 
-// Download history for a date as JSON
+/**
+ * Downloads history for a specific date as a JSON file.
+ * Creates and triggers a download link with formatted data.
+ * @param {string} dateKey - The localStorage key for the date to download
+ */
 function downloadHistory(dateKey) {
   const history = JSON.parse(localStorage.getItem(dateKey) || "[]");
 

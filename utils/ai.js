@@ -1,11 +1,5 @@
-const fs = require("fs");
-const { HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
 const { tryCatch } = require("../lib/tryCatch");
-const {
-  validateAndReadAudioFile,
-  transcribeAudio,
-  processAudioGeneric,
-} = require("./audio-processor");
+const { transcribeAudio, processAudioGeneric } = require("./audio-processor");
 const { createGenAIClient, getGeminiModel } = require("../lib/ai-client");
 
 // Initialize Google AI client
