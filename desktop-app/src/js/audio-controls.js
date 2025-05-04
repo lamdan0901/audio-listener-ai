@@ -311,9 +311,15 @@ function handleStreamEnd(fullAnswer) {
     // Ensure content is displayed even if queue was empty
     const contentElement = document.getElementById("streamingContent");
     if (contentElement) {
-      contentElement.innerHTML = window.streamedContent
-        ? marked.parse(window.streamedContent)
-        : "";
+      if (typeof window.markdownUtils !== "undefined") {
+        contentElement.innerHTML = window.streamedContent
+          ? window.markdownUtils.parseMarkdown(window.streamedContent)
+          : "";
+      } else {
+        contentElement.innerHTML = window.streamedContent
+          ? marked.parse(window.streamedContent)
+          : "";
+      }
       contentElement.classList.remove("stream-active");
     }
   }
@@ -713,7 +719,16 @@ function handleStreamChunk(chunk) {
   }
 
   window.streamedContent += chunk;
-  const formattedContent = marked.parse(window.streamedContent);
+
+  // Format the content using our markdown utility if available
+  let formattedContent;
+  if (typeof window.markdownUtils !== "undefined") {
+    formattedContent = window.markdownUtils.parseMarkdown(
+      window.streamedContent
+    );
+  } else {
+    formattedContent = marked.parse(window.streamedContent);
+  }
 
   // Initialize animationQueue if it doesn't exist
   if (!window.animationQueue) {

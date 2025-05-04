@@ -223,20 +223,41 @@ function viewHistoryItem(id, dateKey) {
   // Format the timestamp
   const timestamp = new Date(entry.timestamp).toLocaleString();
 
-  // Parse the answer as markdown just like the regular answers
-  const formattedAnswer = marked.parse(entry.answer);
+  // Parse the answer as markdown using our markdown utility
+  let formattedAnswer;
+  if (typeof window.markdownUtils !== "undefined") {
+    formattedAnswer = window.markdownUtils.parseMarkdown(entry.answer);
+  } else if (typeof marked !== "undefined") {
+    formattedAnswer = marked.parse(entry.answer);
+  } else {
+    formattedAnswer = entry.answer
+      .replace(/\n\n/g, "<br><br>")
+      .replace(/\n/g, "<br>");
+  }
 
   // Determine if the question should be parsed as markdown
   // Only parse if it contains markdown-like syntax to avoid unnecessary parsing
-  const hasMarkdown = /[*_`#\[\]\(\)]/.test(entry.question);
-  const formattedQuestion = hasMarkdown
-    ? marked.parse(entry.question)
-    : `<p>${entry.question}</p>`;
+  let hasMarkdown;
+  let formattedQuestion;
+
+  if (typeof window.markdownUtils !== "undefined") {
+    hasMarkdown = window.markdownUtils.containsMarkdown(entry.question);
+    formattedQuestion = hasMarkdown
+      ? window.markdownUtils.parseMarkdown(entry.question)
+      : `<p>${entry.question}</p>`;
+  } else {
+    hasMarkdown = /[*_`#\[\]\(\)]/.test(entry.question);
+    formattedQuestion =
+      hasMarkdown && typeof marked !== "undefined"
+        ? marked.parse(entry.question)
+        : `<p>${entry.question}</p>`;
+  }
 
   detailPanel.innerHTML = `
     <div class="history-detail-timestamp">${timestamp}</div>
     <div class="history-detail-question">${formattedQuestion}</div>
     <div class="history-detail-answer">${formattedAnswer}</div>
+    <button onclick="closeHistoryDetail()" style="margin-top: 10px;">Close Detail</button>
   `;
 
   // Highlight the selected item
@@ -360,7 +381,7 @@ function clearAllHistory() {
 function toggleHistoryPanel() {
   const historyPanel = document.getElementById("history-panel");
   const dateSelect = document.getElementById("historyDateSelect");
-  const toggleBtn = document.getElementById("historyToggleBtn"); // This might not exist in desktop app
+  const toggleBtn = document.getElementById("historyToggleBtn");
   const downloadBtn = document.getElementById("downloadHistoryBtn");
 
   historyVisible = !historyVisible;
@@ -369,7 +390,7 @@ function toggleHistoryPanel() {
     // Show history
     historyPanel.style.display = "block";
 
-    // Update toggle button text if it exists
+    // Update toggle button text
     if (toggleBtn) {
       toggleBtn.textContent = "Hide History";
     }
@@ -512,6 +533,12 @@ function downloadHistory(dateKey) {
  */
 function loadHistory() {
   toggleHistoryPanel();
+
+  // Update button text based on visibility state
+  const toggleBtn = document.getElementById("historyToggleBtn");
+  if (toggleBtn) {
+    toggleBtn.textContent = historyVisible ? "Hide History" : "Show History";
+  }
 }
 
 /**

@@ -93,9 +93,13 @@
                 }
 
                 if (contentElement) {
-                  // Append the chunk
-                  // Append the chunk and render as markdown
-                  contentElement.innerHTML += marked.parse(data.chunk);
+                  // Append the chunk and render as markdown using our utility if available
+                  if (typeof window.markdownUtils !== "undefined") {
+                    contentElement.innerHTML +=
+                      window.markdownUtils.parseMarkdown(data.chunk);
+                  } else {
+                    contentElement.innerHTML += marked.parse(data.chunk);
+                  }
                 }
               }
             }
@@ -107,7 +111,16 @@
               "global-answer-content"
             );
             if (contentElement) {
-              contentElement.innerHTML = marked.parse(contentElement.innerHTML);
+              // Use our markdown utility if available
+              if (typeof window.markdownUtils !== "undefined") {
+                contentElement.innerHTML = window.markdownUtils.parseMarkdown(
+                  contentElement.innerHTML
+                );
+              } else {
+                contentElement.innerHTML = marked.parse(
+                  contentElement.innerHTML
+                );
+              }
             }
 
             // Update status to Idle
@@ -288,11 +301,18 @@
     <div id="question"></div>
     <div id="answer"></div>
 
-    <div id="history-container" style="margin-top: 20px">
-      <h2>History</h2>
+    <div
+      id="history-section"
+      style="margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px"
+    >
+      <h2>Saved Questions</h2>
       <div id="history-controls">
-        <button onclick="loadHistory()">Load History</button>
-        <button onclick="clearHistory()">Clear History</button>
+        <button onclick="loadHistory()" id="historyToggleBtn">
+          Load History
+        </button>
+        <button onclick="clearHistory()" id="clearHistoryBtn">
+          Clear History
+        </button>
         <button
           onclick="downloadCurrentHistory()"
           id="downloadHistoryBtn"
@@ -305,23 +325,14 @@
         </select>
       </div>
       <div id="history-panel" style="display: none; margin-top: 20px">
-        <div id="history-list">
-          <!-- History items will be loaded here -->
-        </div>
-        <div
-          id="history-detail"
-          style="
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            background-color: #f9f9f9;
-            display: none;
-          "
-        >
-          <h3>History Detail</h3>
-          <p><strong>Question:</strong> <span id="history-question"></span></p>
-          <p><strong>Answer:</strong> <span id="history-answer"></span></p>
-          <button onclick="closeHistoryDetail()">Close Detail</button>
+        <div id="history-container">
+          <div id="history-list">
+            <!-- History items will be loaded here -->
+          </div>
+          <div
+            id="history-detail"
+            style="display: none; margin-top: 15px"
+          ></div>
         </div>
       </div>
     </div>
@@ -332,6 +343,7 @@
     </div>
 
     <!-- Load application scripts in the correct order -->
+    <script src="./js/markdown-utils.js"></script>
     <script src="./js/animation.js"></script>
     <script src="./js/audio-device-manager.js"></script>
     <script src="./js/audio-recorder.js"></script>

@@ -502,11 +502,16 @@ function setupSocketEventHandlers() {
     // DIRECT APPROACH: Also update a live preview of the content as it comes in
     // This provides a simple, direct way to see the content without relying on the animation system
     try {
-      // Format the content
+      // Format the content using our markdown utility
       let formattedContent;
-      if (typeof marked !== "undefined") {
+      if (typeof window.markdownUtils !== "undefined") {
+        formattedContent = window.markdownUtils.parseMarkdown(
+          window.streamedContent
+        );
+        console.log("Formatted content with markdown utility");
+      } else if (typeof marked !== "undefined") {
         formattedContent = marked.parse(window.streamedContent);
-        console.log("Formatted content with marked library");
+        console.log("Formatted content with marked library directly");
       } else {
         formattedContent = window.streamedContent
           .replace(/\n\n/g, "<br><br>")
@@ -617,11 +622,14 @@ function setupSocketEventHandlers() {
     const fullAnswer = data.fullAnswer || window.streamedContent;
     console.log("Full answer length:", fullAnswer.length);
 
-    // Format the answer
+    // Format the answer using our markdown utility
     let formattedAnswer;
-    if (typeof marked !== "undefined") {
+    if (typeof window.markdownUtils !== "undefined") {
+      formattedAnswer = window.markdownUtils.parseMarkdown(fullAnswer);
+      console.log("Formatted answer with markdown utility");
+    } else if (typeof marked !== "undefined") {
       formattedAnswer = marked.parse(fullAnswer);
-      console.log("Formatted answer with marked library");
+      console.log("Formatted answer with marked library directly");
     } else {
       formattedAnswer = fullAnswer
         .replace(/\n\n/g, "<br><br>")
@@ -1124,10 +1132,12 @@ function displayDirectResponse(content, isError = false) {
     return;
   }
 
-  // Format the content
+  // Format the content using our markdown utility
   let formattedContent;
   try {
-    if (typeof marked !== "undefined" && !isError) {
+    if (typeof window.markdownUtils !== "undefined") {
+      formattedContent = window.markdownUtils.parseMarkdown(content, isError);
+    } else if (typeof marked !== "undefined" && !isError) {
       formattedContent = marked.parse(content);
     } else {
       formattedContent = content
