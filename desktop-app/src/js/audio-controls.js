@@ -66,10 +66,20 @@ async function toggleRecording() {
     loading.style.display = "none";
 
     window.isRecording = true;
+
+    // Update global button states
+    if (typeof window.updateGlobalRecordingButtons === "function") {
+      window.updateGlobalRecordingButtons();
+    }
   } else {
     // STOP RECORDING - First update the state to prevent multiple clicks
     window.isRecording = false;
     btn.textContent = "Start Listening";
+
+    // Update global button states
+    if (typeof window.updateGlobalRecordingButtons === "function") {
+      window.updateGlobalRecordingButtons();
+    }
 
     // Reset loading message before showing it
     loading.innerHTML =
@@ -262,6 +272,11 @@ function handleStreamEnd(fullAnswer) {
   // Update follow-up checkbox state
   updateFollowUpCheckbox();
 
+  // Update global button states
+  if (typeof window.updateGlobalRecordingButtons === "function") {
+    window.updateGlobalRecordingButtons();
+  }
+
   // Final animation update
   if (window.animationQueue && window.animationQueue.length > 0) {
     const finalContent =
@@ -342,6 +357,11 @@ function handleStreamError(errorMessage) {
 
   // Update follow-up checkbox state
   updateFollowUpCheckbox();
+
+  // Update global button states
+  if (typeof window.updateGlobalRecordingButtons === "function") {
+    window.updateGlobalRecordingButtons();
+  }
 
   document.getElementById(
     "answer"
@@ -956,6 +976,11 @@ async function cancelRequest() {
     window.isRecording = false;
     const btn = document.getElementById("toggleBtn");
     btn.textContent = "Start Listening";
+
+    // Update global button states
+    if (typeof window.updateGlobalRecordingButtons === "function") {
+      window.updateGlobalRecordingButtons();
+    }
   }
 
   // Abort the ongoing fetch request, if any
@@ -1009,6 +1034,11 @@ async function cancelRequest() {
 
   // Reset animation state
   resetAnimationState(); // Use the helper function
+
+  // Final update of global button states
+  if (typeof window.updateGlobalRecordingButtons === "function") {
+    window.updateGlobalRecordingButtons();
+  }
 }
 
 /**

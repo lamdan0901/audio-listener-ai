@@ -1,28 +1,22 @@
 // Global state - using window to make these variables accessible across modules
-window.isRecording = false; // Tracks if we're currently recording
-window.lastAudioFile = null;
-window.isCancelled = false;
-window.hasLastQuestion = false; // Track if we have a previous question
-window.originalQuestion = null; // Store the original question for Gemini processing
+// Initialize global variables only if they don't already exist
+if (typeof window.isRecording === "undefined") window.isRecording = false; // Tracks if we're currently recording
+if (typeof window.lastAudioFile === "undefined") window.lastAudioFile = null;
+if (typeof window.isCancelled === "undefined") window.isCancelled = false;
+if (typeof window.hasLastQuestion === "undefined")
+  window.hasLastQuestion = false; // Track if we have a previous question
+if (typeof window.originalQuestion === "undefined")
+  window.originalQuestion = null; // Store the original question for Gemini processing
 
-// Local references for convenience
-let isRecording = window.isRecording;
-let lastAudioFile = window.lastAudioFile;
-let isCancelled = window.isCancelled;
-let hasLastQuestion = window.hasLastQuestion;
-let originalQuestion = window.originalQuestion;
+// Use the global variables directly instead of creating local references
 
 // Animation state variables - using window to make these variables accessible across modules
-window.streamedContent = "";
-window.previousContent = "";
-window.animationQueue = [];
-window.animationInProgress = false;
-
-// Local references for convenience
-let streamedContent = window.streamedContent;
-let previousContent = window.previousContent;
-let animationQueue = window.animationQueue;
-let animationInProgress = window.animationInProgress;
+// Initialize animation state variables only if they don't already exist
+if (typeof window.streamedContent === "undefined") window.streamedContent = "";
+if (typeof window.previousContent === "undefined") window.previousContent = "";
+if (typeof window.animationQueue === "undefined") window.animationQueue = [];
+if (typeof window.animationInProgress === "undefined")
+  window.animationInProgress = false;
 
 // Function to update recording button states
 function updateGlobalRecordingButtons() {
@@ -123,7 +117,16 @@ function updateConnectionStatus() {
 // Load saved question context on page load
 document.addEventListener("DOMContentLoaded", function () {
   // Reset animation state on page load
-  resetAnimationState();
+  if (typeof resetAnimationState === "function") {
+    resetAnimationState();
+  } else {
+    // Fallback if the function isn't available
+    console.log("resetAnimationState function not available, using fallback");
+    window.previousContent = "";
+    window.animationInProgress = false;
+    window.animationQueue = [];
+    window.streamedContent = "";
+  }
 
   // Start connection status updates
   updateConnectionStatus();
@@ -140,45 +143,65 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Initialize Socket.IO connection with fallbacks
-  const apiUrl = window.electronAPI.getApiBaseUrl();
+  try {
+    const apiUrl = window.electronAPI.getApiBaseUrl();
 
-  if (apiUrl) {
-    console.log(`Initializing Socket.IO connection to ${apiUrl}`);
-    window.socketClient
-      .initializeSocket(apiUrl)
-      .then(() => {
+    // Function to handle connection attempts with fallbacks
+    const attemptConnection = async () => {
+      // List of URLs to try in order
+      const urls = [
+        apiUrl,
+        "http://localhost:3033",
+        "http://127.0.0.1:3033",
+      ].filter(Boolean); // Remove any null/undefined values
+
+      console.log("Will try connecting to these URLs in order:", urls);
+
+      // Try each URL in sequence
+      for (const url of urls) {
+        try {
+          console.log(`Attempting to connect to ${url}...`);
+          if (typeof window.socketClient.manualConnect === "function") {
+            await window.socketClient.manualConnect(url);
+            console.log(`Successfully connected to ${url}`);
+            return true; // Connection successful
+          } else {
+            console.error("socketClient.manualConnect is not a function");
+            break;
+          }
+        } catch (err) {
+          console.log(`Failed to connect to ${url}:`, err.message);
+          // Continue to next URL
+        }
+      }
+
+      console.log("All connection attempts failed");
+      return false;
+    };
+
+    // Start the connection process
+    attemptConnection().then((success) => {
+      if (success) {
         console.log("Socket.IO connection established successfully");
-      })
-      .catch((error) => {
-        console.error("Failed to establish Socket.IO connection:", error);
-
-        // Try fallback URLs if the main one fails
-        console.log("Trying fallback connection to http://localhost:3033");
-        setTimeout(() => {
-          window.socketClient
-            .manualConnect("http://localhost:3033")
-            .then(() => {
-              console.log("Fallback connection successful");
-            })
-            .catch((fallbackError) => {
-              console.error("Fallback connection failed:", fallbackError);
-
-              // Try one more fallback
-              console.log("Trying second fallback to http://127.0.0.1:3033");
-              setTimeout(() => {
-                window.socketClient.manualConnect("http://127.0.0.1:3033");
-              }, 1000);
-            });
-        }, 1000);
-      });
-  } else {
-    console.error("API URL not available. Trying default connection.");
-
-    // Try default connection
-    window.socketClient.manualConnect("http://localhost:3033").catch(() => {
-      // If that fails, try with IP
-      window.socketClient.manualConnect("http://127.0.0.1:3033");
+      } else {
+        console.log("Could not establish Socket.IO connection to any endpoint");
+        // The app can still function without a Socket.IO connection
+        // Just show a message to the user
+        const answerElement = document.getElementById("answer");
+        if (answerElement) {
+          answerElement.innerHTML = `
+            <div style="padding: 10px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; margin: 10px 0;">
+              <strong>Note:</strong> Could not connect to the server. Some features may be limited.
+              <br>
+              The app will continue to work, but you may need to restart the server.
+            </div>
+          `;
+        }
+      }
     });
+  } catch (error) {
+    console.error("Error during Socket.IO connection setup:", error);
+    // The app can still function without a Socket.IO connection
   }
 
   // Load saved custom context from localStorage if available
@@ -229,27 +252,57 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Check if we have a previous session with questions
     // We'll request the current status from the server
-    const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
-    // NOTE: This assumes the API server is running and accessible at this endpoint
-    fetch(`${apiUrl}/api/v1/status`) // Use full URL
-      .then((response) => response.json())
-      .then((status) => {
-        console.log("Server status:", status);
-        // If there's a last question, we can enable follow-up questions
-        if (status.hasLastQuestion) {
-          console.log(`Previous question found: ${status.lastQuestionPreview}`);
-          hasLastQuestion = true;
-          followUpCheckbox.disabled = false;
-        } else {
-          console.log("No previous questions found");
-          hasLastQuestion = false;
-          followUpCheckbox.disabled = true;
-        }
-      })
-      .catch((error) => {
-        console.error("Error checking session status:", error);
-        // Handle error appropriately in Electron context (e.g., show message)
-      });
+    try {
+      const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
+
+      // Skip the API call if we're having issues - this is non-critical functionality
+      if (!apiUrl) {
+        console.log("API URL not available, skipping session status check");
+        return;
+      }
+
+      // Add a timeout to the fetch to prevent long waits
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+      fetch(`${apiUrl}/api/v1/status`, { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then((status) => {
+          console.log("Server status:", status);
+          // If there's a last question, we can enable follow-up questions
+          if (status && status.hasLastQuestion) {
+            console.log(
+              `Previous question found: ${status.lastQuestionPreview}`
+            );
+            window.hasLastQuestion = true;
+            followUpCheckbox.disabled = false;
+          } else {
+            console.log("No previous questions found");
+            window.hasLastQuestion = false;
+            followUpCheckbox.disabled = true;
+          }
+          clearTimeout(timeoutId);
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          console.log(
+            "Error checking session status (non-critical):",
+            error.message
+          );
+          // Just continue without the session status - this is non-critical functionality
+        });
+    } catch (error) {
+      console.log(
+        "Error in session status check setup (non-critical):",
+        error.message
+      );
+      // Continue without the session status
+    }
   }
 
   console.log("Audio Listener AI Desktop application initialized");
@@ -257,6 +310,5 @@ document.addEventListener("DOMContentLoaded", function () {
   // Initial button state update
   updateGlobalRecordingButtons();
 
-  // Set up periodic updates to keep UI in sync
-  setInterval(updateGlobalRecordingButtons, 1000);
+  // No need for periodic updates - we'll update UI based on state changes instead
 });

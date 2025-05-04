@@ -148,18 +148,34 @@ async function startRecording() {
     // Add additional event handlers for better debugging
     mediaRecorder.onstart = () => {
       console.log("MediaRecorder started recording");
+      // Update UI when recording starts
+      if (typeof window.updateGlobalRecordingButtons === "function") {
+        window.updateGlobalRecordingButtons();
+      }
     };
 
     mediaRecorder.onpause = () => {
       console.log("MediaRecorder paused");
+      // Update UI when recording pauses
+      if (typeof window.updateGlobalRecordingButtons === "function") {
+        window.updateGlobalRecordingButtons();
+      }
     };
 
     mediaRecorder.onresume = () => {
       console.log("MediaRecorder resumed");
+      // Update UI when recording resumes
+      if (typeof window.updateGlobalRecordingButtons === "function") {
+        window.updateGlobalRecordingButtons();
+      }
     };
 
     mediaRecorder.onerror = (event) => {
       console.error("MediaRecorder error:", event.error);
+      // Update UI when recording errors
+      if (typeof window.updateGlobalRecordingButtons === "function") {
+        window.updateGlobalRecordingButtons();
+      }
     };
 
     // Start recording with a timeslice to get data more frequently
@@ -197,6 +213,11 @@ async function stopRecording() {
     // Define what happens when recording stops
     mediaRecorder.onstop = () => {
       console.log("MediaRecorder stopped");
+
+      // Update UI when recording stops
+      if (typeof window.updateGlobalRecordingButtons === "function") {
+        window.updateGlobalRecordingButtons();
+      }
 
       // Check if we have any audio chunks
       if (audioChunks.length === 0) {
@@ -301,6 +322,11 @@ function cancelRecording() {
   // Clear recording state
   mediaRecorder = null;
   audioChunks = [];
+
+  // Update UI when recording is cancelled
+  if (typeof window.updateGlobalRecordingButtons === "function") {
+    window.updateGlobalRecordingButtons();
+  }
 
   console.log("Recording cancelled successfully");
 }

@@ -31,8 +31,13 @@ async function initializeSocket(serverUrl) {
 
       // Check if marked library is available
       if (typeof marked === "undefined") {
-        console.warn("Marked library is not loaded. Some formatting may not work correctly.");
-        addDebugLog("Marked library is not loaded. Some formatting may not work correctly.", "warning");
+        console.warn(
+          "Marked library is not loaded. Some formatting may not work correctly."
+        );
+        addDebugLog(
+          "Marked library is not loaded. Some formatting may not work correctly.",
+          "warning"
+        );
       } else {
         console.log("Marked library is loaded");
         addDebugLog("Marked library is loaded", "success");
@@ -41,6 +46,21 @@ async function initializeSocket(serverUrl) {
       // Add debug info about the server URL
       console.log("Attempting to connect to Socket.IO server at:", serverUrl);
       addDebugLog(`Connecting to Socket.IO server: ${serverUrl}`);
+
+      // Initialize streamedContent if it doesn't exist
+      if (typeof window.streamedContent === "undefined") {
+        window.streamedContent = "";
+      }
+
+      // Initialize animation queue if it doesn't exist
+      if (typeof window.animationQueue === "undefined") {
+        window.animationQueue = [];
+      }
+
+      // Initialize animation in progress flag if it doesn't exist
+      if (typeof window.animationInProgress === "undefined") {
+        window.animationInProgress = false;
+      }
 
       // Create a more robust Socket.IO connection with fallback options
       socket = io(serverUrl, {
@@ -53,24 +73,21 @@ async function initializeSocket(serverUrl) {
         forceNew: true,
       });
 
-        // Set up event handlers with enhanced debugging
-        socket.on("connect", () => {
-          console.log(
-            "%c Socket.IO CONNECTED: " + socket.id,
-            "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 2px;"
-          );
-          console.log(
-            "Socket transport type:",
-            socket.io.engine.transport.name
-          );
-          console.log("Socket protocol:", socket.io.engine.transport.protocol);
+      // Set up event handlers with enhanced debugging
+      socket.on("connect", () => {
+        console.log(
+          "%c Socket.IO CONNECTED: " + socket.id,
+          "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
+        console.log("Socket transport type:", socket.io.engine.transport.name);
+        console.log("Socket protocol:", socket.io.engine.transport.protocol);
 
-          // Display connection info in the UI for debugging
-          const debugInfo = document.createElement("div");
-          debugInfo.id = "socket-debug-info";
-          debugInfo.style.cssText =
-            "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
-          debugInfo.innerHTML = `
+        // Display connection info in the UI for debugging
+        const debugInfo = document.createElement("div");
+        debugInfo.id = "socket-debug-info";
+        debugInfo.style.cssText =
+          "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
+        debugInfo.innerHTML = `
             <strong>Socket.IO Debug</strong><br>
             Connected: true<br>
             Socket ID: ${socket.id}<br>
@@ -78,98 +95,90 @@ async function initializeSocket(serverUrl) {
             Server URL: ${serverUrl}<br>
             <button onclick="this.parentNode.style.display='none'">Close</button>
           `;
-          document.body.appendChild(debugInfo);
+        document.body.appendChild(debugInfo);
 
-          isConnected = true;
-          resolve(true);
-        });
+        isConnected = true;
+        resolve(true);
+      });
 
-        socket.on("connect_error", (error) => {
-          console.error(
-            "%c Socket.IO CONNECTION ERROR: " + error,
-            "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;"
-          );
-          console.error("Error details:", error);
+      socket.on("connect_error", (error) => {
+        console.error(
+          "%c Socket.IO CONNECTION ERROR: " + error,
+          "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
+        console.error("Error details:", error);
 
-          // Display error info in the UI
-          const errorInfo = document.createElement("div");
-          errorInfo.id = "socket-error-info";
-          errorInfo.style.cssText =
-            "position: fixed; bottom: 10px; right: 10px; background: rgba(255,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
-          errorInfo.innerHTML = `
+        // Display error info in the UI
+        const errorInfo = document.createElement("div");
+        errorInfo.id = "socket-error-info";
+        errorInfo.style.cssText =
+          "position: fixed; bottom: 10px; right: 10px; background: rgba(255,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
+        errorInfo.innerHTML = `
             <strong>Socket.IO Error</strong><br>
             Error: ${error}<br>
             Server URL: ${serverUrl}<br>
             <button onclick="this.parentNode.style.display='none'">Close</button>
           `;
-          document.body.appendChild(errorInfo);
+        document.body.appendChild(errorInfo);
 
-          isConnected = false;
-          reject(error);
-        });
+        isConnected = false;
+        reject(error);
+      });
 
-        socket.on("disconnect", (reason) => {
-          console.log(
-            "%c Socket.IO DISCONNECTED: " + reason,
-            "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;"
-          );
+      socket.on("disconnect", (reason) => {
+        console.log(
+          "%c Socket.IO DISCONNECTED: " + reason,
+          "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
 
-          // Update connection info in the UI
-          const debugInfo = document.getElementById("socket-debug-info");
-          if (debugInfo) {
-            debugInfo.innerHTML = `
+        // Update connection info in the UI
+        const debugInfo = document.getElementById("socket-debug-info");
+        if (debugInfo) {
+          debugInfo.innerHTML = `
               <strong>Socket.IO Debug</strong><br>
               Connected: false<br>
               Disconnect reason: ${reason}<br>
               Server URL: ${serverUrl}<br>
               <button onclick="this.parentNode.style.display='none'">Close</button>
             `;
-          }
+        }
 
-          isConnected = false;
-        });
+        isConnected = false;
+      });
 
-        // Monitor all incoming events for debugging
-        socket.onAny((eventName, ...args) => {
-          console.log(
-            `%c Socket.IO EVENT RECEIVED: ${eventName}`,
-            "background: #2196F3; color: white; padding: 2px 6px; border-radius: 2px;"
+      // Monitor all incoming events for debugging
+      socket.onAny((eventName, ...args) => {
+        console.log(
+          `%c Socket.IO EVENT RECEIVED: ${eventName}`,
+          "background: #2196F3; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
+        console.log("Event data:", ...args);
+
+        // Update the debug info with the latest event
+        const debugInfo = document.getElementById("socket-debug-info");
+        if (debugInfo) {
+          const eventData =
+            JSON.stringify(args[0]).substring(0, 50) +
+            (JSON.stringify(args[0]).length > 50 ? "..." : "");
+          const eventLine = document.createElement("div");
+          eventLine.innerHTML = `<small>${new Date().toLocaleTimeString()}: ${eventName} - ${eventData}</small>`;
+
+          // Insert at the beginning, keep only last 5 events
+          debugInfo.insertBefore(
+            eventLine,
+            debugInfo.querySelector("button").previousSibling
           );
-          console.log("Event data:", ...args);
 
-          // Update the debug info with the latest event
-          const debugInfo = document.getElementById("socket-debug-info");
-          if (debugInfo) {
-            const eventData =
-              JSON.stringify(args[0]).substring(0, 50) +
-              (JSON.stringify(args[0]).length > 50 ? "..." : "");
-            const eventLine = document.createElement("div");
-            eventLine.innerHTML = `<small>${new Date().toLocaleTimeString()}: ${eventName} - ${eventData}</small>`;
-
-            // Insert at the beginning, keep only last 5 events
-            debugInfo.insertBefore(
-              eventLine,
-              debugInfo.querySelector("button").previousSibling
-            );
-
-            // Limit to last 5 events
-            const events = debugInfo.querySelectorAll("small");
-            if (events.length > 5) {
-              debugInfo.removeChild(events[0]);
-            }
+          // Limit to last 5 events
+          const events = debugInfo.querySelectorAll("small");
+          if (events.length > 5) {
+            debugInfo.removeChild(events[0]);
           }
-        });
+        }
+      });
 
-        // Set up event handlers for the application
-        setupSocketEventHandlers();
-      };
-
-      script.onerror = (error) => {
-        console.error("Error loading Socket.IO client library:", error);
-        reject(error);
-      };
-
-      document.head.appendChild(script);
+      // Set up event handlers for the application
+      setupSocketEventHandlers();
     } catch (error) {
       console.error("Error initializing Socket.IO:", error);
       reject(error);
@@ -273,8 +282,17 @@ function setupSocketEventHandlers() {
     }
 
     // Reset animation state for the new answer
-    resetAnimationState();
-    console.log("Animation state reset");
+    if (typeof resetAnimationState === "function") {
+      resetAnimationState();
+      console.log("Animation state reset");
+    } else {
+      // Fallback if the function isn't available
+      window.previousContent = "";
+      window.animationInProgress = false;
+      window.animationQueue = [];
+      window.streamedContent = "";
+      console.log("Animation state reset (fallback method)");
+    }
 
     // Update loading message
     const loading = document.getElementById("loading");
@@ -367,7 +385,17 @@ function setupSocketEventHandlers() {
 
       if (!window.animationInProgress) {
         console.log("Starting animation process (backup approach)");
-        processNextAnimation();
+        if (typeof processNextAnimation === "function") {
+          processNextAnimation();
+        } else {
+          console.warn("processNextAnimation function not available");
+          // Fallback - just display the content directly
+          const contentElement = document.getElementById("streamingContent");
+          if (contentElement) {
+            contentElement.innerHTML = formattedContent;
+            contentElement.style.display = "block";
+          }
+        }
       }
     } catch (error) {
       console.error("Error parsing markdown:", error);
@@ -492,10 +520,50 @@ function setupSocketEventHandlers() {
         const questions = data.transcript.split(" | ");
         formattedQuestion = questions.map((q, i) => `${i + 1}. ${q}`).join(" ");
       }
-      saveToHistory(formattedQuestion, data.fullAnswer);
+
+      // Check if saveToHistory function is available
+      if (typeof saveToHistory === "function") {
+        saveToHistory(formattedQuestion, data.fullAnswer);
+      } else {
+        console.warn(
+          "saveToHistory function not available - history not saved"
+        );
+        // Fallback - save to localStorage directly if needed
+        try {
+          const historyKey =
+            "ai_assistant_history_" + new Date().toISOString().split("T")[0];
+          let todayHistory = [];
+          const existingData = localStorage.getItem(historyKey);
+          if (existingData) {
+            todayHistory = JSON.parse(existingData);
+          }
+
+          const newEntry = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            question: formattedQuestion,
+            answer: data.fullAnswer,
+          };
+
+          todayHistory.push(newEntry);
+          localStorage.setItem(historyKey, JSON.stringify(todayHistory));
+          console.log("Saved history entry using fallback method");
+        } catch (error) {
+          console.error("Failed to save history using fallback method:", error);
+        }
+      }
     }
 
-    resetAnimationState();
+    // Reset animation state
+    if (typeof resetAnimationState === "function") {
+      resetAnimationState();
+    } else {
+      // Fallback if the function isn't available
+      window.previousContent = "";
+      window.animationInProgress = false;
+      window.animationQueue = [];
+      window.streamedContent = "";
+    }
   });
 
   // Error event
@@ -557,6 +625,27 @@ function setupSocketEventHandlers() {
  */
 function isSocketConnected() {
   return isConnected && socket && socket.connected;
+}
+
+/**
+ * Updates the follow-up checkbox state based on whether there's a previous question.
+ * Enables or disables the checkbox appropriately and logs debugging information.
+ */
+function updateFollowUpCheckbox() {
+  const followUpCheckbox = document.getElementById("isFollowUpCheckbox");
+  if (followUpCheckbox) {
+    // Enable the checkbox if we have a previous question
+    followUpCheckbox.disabled = !window.hasLastQuestion;
+
+    // Always uncheck the checkbox after a response is given
+    // This ensures it's unchecked for the next question
+    followUpCheckbox.checked = false;
+
+    // Log the state for debugging
+    console.log(
+      `Updated follow-up checkbox: disabled=${followUpCheckbox.disabled}, checked=${followUpCheckbox.checked}, hasLastQuestion=${window.hasLastQuestion}`
+    );
+  }
 }
 
 /**
@@ -643,12 +732,15 @@ function manualConnect(url) {
   return new Promise((resolve, reject) => {
     // Check if Socket.IO is available
     if (typeof io === "undefined") {
-      const errorMsg = "Socket.IO client library not loaded. Cannot connect manually.";
+      const errorMsg =
+        "Socket.IO client library not loaded. Cannot connect manually.";
       console.error(errorMsg);
       addDebugLog(errorMsg, "error");
 
       // Show an error message to the user
-      alert("Socket.IO client library not loaded. Please refresh the page and try again.");
+      alert(
+        "Socket.IO client library not loaded. Please refresh the page and try again."
+      );
 
       // Reject the promise
       reject(new Error(errorMsg));
@@ -684,26 +776,26 @@ function manualConnect(url) {
         }
       }, 10000);
 
-    // Set up basic event handlers
-    socket.on("connect", () => {
-      console.log("Socket connected manually:", socket.id);
-      addDebugLog(`Connected to ${url} with ID: ${socket.id}`, "success");
-      isConnected = true;
+      // Set up basic event handlers
+      socket.on("connect", () => {
+        console.log("Socket connected manually:", socket.id);
+        addDebugLog(`Connected to ${url} with ID: ${socket.id}`, "success");
+        isConnected = true;
 
-      // Clear the connection timeout
-      clearTimeout(connectionTimeout);
+        // Clear the connection timeout
+        clearTimeout(connectionTimeout);
 
-      // Update the socket status indicator
-      const socketStatus = document.getElementById('socket-status');
-      if (socketStatus) {
-        socketStatus.textContent = "Connected";
-        socketStatus.style.backgroundColor = "#4CAF50";
-      }
+        // Update the socket status indicator
+        const socketStatus = document.getElementById("socket-status");
+        if (socketStatus) {
+          socketStatus.textContent = "Connected";
+          socketStatus.style.backgroundColor = "#4CAF50";
+        }
 
-      // Update the debug info
-      const debugInfo = document.getElementById("socket-debug-info");
-      if (debugInfo) {
-        debugInfo.innerHTML = `
+        // Update the debug info
+        const debugInfo = document.getElementById("socket-debug-info");
+        if (debugInfo) {
+          debugInfo.innerHTML = `
           <strong>Socket.IO Debug</strong><br>
           Connected: true<br>
           Socket ID: ${socket.id}<br>
@@ -711,13 +803,13 @@ function manualConnect(url) {
           Server URL: ${url}<br>
           <button onclick="this.parentNode.style.display='none'">Close</button>
         `;
-      } else {
-        // Create a new debug info element
-        const newDebugInfo = document.createElement("div");
-        newDebugInfo.id = "socket-debug-info";
-        newDebugInfo.style.cssText =
-          "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
-        newDebugInfo.innerHTML = `
+        } else {
+          // Create a new debug info element
+          const newDebugInfo = document.createElement("div");
+          newDebugInfo.id = "socket-debug-info";
+          newDebugInfo.style.cssText =
+            "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999;";
+          newDebugInfo.innerHTML = `
           <strong>Socket.IO Debug</strong><br>
           Connected: true<br>
           Socket ID: ${socket.id}<br>
@@ -725,23 +817,50 @@ function manualConnect(url) {
           Server URL: ${url}<br>
           <button onclick="this.parentNode.style.display='none'">Close</button>
         `;
-        document.body.appendChild(newDebugInfo);
-      }
+          document.body.appendChild(newDebugInfo);
+        }
 
-      // Set up event handlers for the application
-      setupSocketEventHandlers();
+        // Set up event handlers for the application
+        setupSocketEventHandlers();
 
-      // Resolve the promise
-      resolve(socket);
-    });
+        // Resolve the promise
+        resolve(socket);
+      });
 
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-      addDebugLog(`Connection error: ${error}`, "error");
-      isConnected = false;
+      socket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+        addDebugLog(`Connection error: ${error}`, "error");
+        isConnected = false;
+
+        // Update the socket status indicator
+        const socketStatus = document.getElementById("socket-status");
+        if (socketStatus) {
+          socketStatus.textContent = "Connection Error";
+          socketStatus.style.backgroundColor = "#F44336";
+        }
+
+        // Reject the promise
+        reject(error);
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("Socket disconnected:", reason);
+        addDebugLog(`Disconnected: ${reason}`, "warning");
+        isConnected = false;
+
+        // Update the socket status indicator
+        const socketStatus = document.getElementById("socket-status");
+        if (socketStatus) {
+          socketStatus.textContent = "Disconnected";
+          socketStatus.style.backgroundColor = "#FF9800";
+        }
+      });
+    } catch (error) {
+      console.error("Error creating Socket.IO connection:", error);
+      addDebugLog(`Error creating connection: ${error}`, "error");
 
       // Update the socket status indicator
-      const socketStatus = document.getElementById('socket-status');
+      const socketStatus = document.getElementById("socket-status");
       if (socketStatus) {
         socketStatus.textContent = "Connection Error";
         socketStatus.style.backgroundColor = "#F44336";
@@ -749,35 +868,8 @@ function manualConnect(url) {
 
       // Reject the promise
       reject(error);
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
-      addDebugLog(`Disconnected: ${reason}`, "warning");
-      isConnected = false;
-
-      // Update the socket status indicator
-      const socketStatus = document.getElementById('socket-status');
-      if (socketStatus) {
-        socketStatus.textContent = "Disconnected";
-        socketStatus.style.backgroundColor = "#FF9800";
-      }
-    });
-  } catch (error) {
-    console.error("Error creating Socket.IO connection:", error);
-    addDebugLog(`Error creating connection: ${error}`, "error");
-
-    // Update the socket status indicator
-    const socketStatus = document.getElementById('socket-status');
-    if (socketStatus) {
-      socketStatus.textContent = "Connection Error";
-      socketStatus.style.backgroundColor = "#F44336";
     }
-
-    // Reject the promise
-    reject(error);
-  }
-});
+  });
 }
 
 /**
