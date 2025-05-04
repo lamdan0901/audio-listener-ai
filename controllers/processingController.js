@@ -1,5 +1,6 @@
 const baseController = require("./baseController");
 const { tryCatch } = require("../lib/tryCatch");
+const backendEvents = require("../lib/events");
 
 /**
  * Controller for handling processing state operations
@@ -12,7 +13,7 @@ const { tryCatch } = require("../lib/tryCatch");
  * @param {Object} io - Socket.io instance
  * @returns {Promise<void>}
  */
-async function cancelProcessing(req, res, io) {
+async function cancelProcessing(req, res) {
   console.log("Canceling processing...");
 
   const result = await tryCatch(async () => {
@@ -20,7 +21,9 @@ async function cancelProcessing(req, res, io) {
     baseController.setCancelled(true);
 
     // Emit cancellation event to clients
-    io.emit("processingCancelled", { message: "Processing cancelled" });
+    backendEvents.emit("processingCancelled", {
+      message: "Processing cancelled",
+    });
 
     // Reset the cancelled state for the next request
     setTimeout(() => {

@@ -53,15 +53,30 @@ function handleFollowUpLogic(isFollowUp, transcript, storeQuestion = true) {
 
 // Handle the case where no speech was detected
 function handleEmptyTranscript(languageCode, audioFile) {
+  console.log("Handling empty transcript for audio file:", audioFile);
+
+  // More detailed response with troubleshooting suggestions
   const apology =
     languageCode === "vi"
-      ? "Xin lỗi, tôi không nghe rõ. Vui lòng thử lại."
-      : "Sorry, I didn't catch that. Please try again.";
+      ? "Xin lỗi, tôi không nghe rõ. Vui lòng thử lại và đảm bảo rằng:\n\n" +
+        "1. Microphone của bạn đang hoạt động\n" +
+        "2. Bạn đang nói đủ to\n" +
+        "3. Không có tiếng ồn xung quanh\n\n" +
+        "Bạn cũng có thể thử chọn một thiết bị microphone khác nếu có sẵn."
+      : "Sorry, I didn't catch that. Please try again and make sure that:\n\n" +
+        "1. Your microphone is working properly\n" +
+        "2. You're speaking loud enough\n" +
+        "3. There isn't too much background noise\n\n" +
+        "You can also try selecting a different microphone device if available.";
+
+  // Log the empty transcript event for debugging
+  console.log("Empty transcript detected, returning apology message");
 
   return {
     transcript: "",
     answer: apology,
     audioFile,
+    emptyTranscript: true, // Flag to indicate this was an empty transcript
   };
 }
 

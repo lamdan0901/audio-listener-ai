@@ -6,6 +6,7 @@ const {
 } = require("../utils/ai");
 const baseController = require("./baseController");
 const { tryCatch } = require("../lib/tryCatch");
+const backendEvents = require("../lib/events");
 
 /**
  * Handles sending updates to client based on transcription result
@@ -15,12 +16,7 @@ const { tryCatch } = require("../lib/tryCatch");
  * @param {string} fileToProcess - Audio file path
  * @returns {Promise<void>}
  */
-async function handleTranscriptionResult(
-  io,
-  transcript,
-  params,
-  fileToProcess
-) {
+async function handleTranscriptionResult(transcript, params, fileToProcess) {
   // Check if we should continue
   if (baseController.isProcessingCancelled()) {
     console.log("Processing was cancelled during transcription");
@@ -28,17 +24,35 @@ async function handleTranscriptionResult(
   }
 
   if (!transcript || transcript.trim() === "") {
+    console.log("Empty transcript detected in handleTranscriptionResult");
+
     // Handle empty transcript result
     const emptyResult = baseController.handleEmptyTranscript(
       params.languageCode,
       fileToProcess
     );
+
     if (!baseController.isProcessingCancelled()) {
-      io.emit("update", emptyResult);
+      // First emit a transcript event with empty string so the client knows what happened
+      backendEvents.emit("transcript", { transcript: "" });
+
+      // Then emit the update with the apology message
+      backendEvents.emit("update", emptyResult);
+
+      // Also emit a streamEnd event to ensure the client UI is properly updated
+      backendEvents.emit("streamEnd", {
+        fullAnswer: emptyResult.answer,
+        transcript: "",
+        audioFile: fileToProcess,
+        emptyTranscript: true,
+      });
     }
+
+    // Return early since we can't process an empty transcript
+    return;
   } else if (params.useStreaming) {
     // Stream the response option
-    io.emit("transcript", { transcript });
+    backendEvents.emit("transcript", { transcript });
 
     // Handle follow-up logic
     baseController.handleFollowUpLogic(params.isFollowUp, transcript);
@@ -50,7 +64,6 @@ async function handleTranscriptionResult(
     };
 
     streamResponseToClient(
-      io,
       transcript,
       params.lang,
       params.questionContext,
@@ -59,7 +72,7 @@ async function handleTranscriptionResult(
     ).catch((error) => {
       console.error("Error in streaming background task:", error);
       if (!baseController.isProcessingCancelled()) {
-        io.emit("streamError", { error: error.message });
+        backendEvents.emit("streamError", { error: error.message });
       }
     });
   } else {
@@ -79,7 +92,7 @@ async function handleTranscriptionResult(
 
     // Only emit the update if processing wasn't cancelled
     if (!baseController.isProcessingCancelled()) {
-      io.emit("update", {
+      backendEvents.emit("update", {
         transcript,
         answer,
         audioFile: fileToProcess,
@@ -146,7 +159,6 @@ async function processAudioDirectlyWithGemini(
  * @returns {Promise<void>}
  */
 async function streamResponseToClient(
-  io,
   transcript,
   lang,
   questionContext,
@@ -181,7 +193,7 @@ async function streamResponseToClient(
         fullAnswer += chunk;
 
         // Emit the chunk to the client
-        io.emit("streamChunk", {
+        backendEvents.emit("streamChunk", {
           chunk,
           transcript: transcript,
           audioFile: audioFile,
@@ -191,7 +203,7 @@ async function streamResponseToClient(
 
       // Only send the final update if not cancelled
       if (!baseController.isProcessingCancelled()) {
-        io.emit("streamEnd", {
+        backendEvents.emit("streamEnd", {
           fullAnswer,
           transcript: transcript,
           audioFile: audioFile,
@@ -207,7 +219,7 @@ async function streamResponseToClient(
   if (streamResult.error) {
     console.error("Error streaming response:", streamResult.error);
     if (!baseController.isProcessingCancelled()) {
-      io.emit("streamError", { error: streamResult.error.message });
+      backendEvents.emit("streamError", { error: streamResult.error.message });
     }
   }
 }
@@ -215,7 +227,7 @@ async function streamResponseToClient(
 // Controller methods
 const aiProcessingController = {
   // Process audio with Gemini AI directly
-  processWithGemini: async (req, res, io) => {
+  processWithGemini: async (req, res) => {
     // Parse and prepare request parameters
     const params = baseController.prepareRequestParams(req.body);
 
@@ -235,7 +247,7 @@ const aiProcessingController = {
     if (!fileToProcess || !fs.existsSync(fileToProcess)) {
       const errorMsg = "No audio file available for Gemini processing";
       console.error(errorMsg);
-      io.emit("error", errorMsg);
+      backendEvents.emit("error", errorMsg); // Use backendEvents here too
       return res.status(400).send(errorMsg);
     }
 
@@ -245,7 +257,7 @@ const aiProcessingController = {
         baseController.setRetryCount(0);
 
         // Inform client we're processing
-        io.emit("processing");
+        backendEvents.emit("processing");
 
         // Process audio directly with Gemini
         const result = await processAudioDirectlyWithGemini(
@@ -273,7 +285,7 @@ const aiProcessingController = {
           // If streaming is enabled and we have a transcript, stream the answer
           if (params.useStreaming && result.transcript) {
             // Emit the transcript first
-            io.emit("transcript", {
+            backendEvents.emit("transcript", {
               transcript: result.transcript,
               processedWithGemini: true,
             });
@@ -286,7 +298,6 @@ const aiProcessingController = {
             };
 
             streamResponseToClient(
-              io,
               result.transcript,
               params.lang,
               params.questionContext,
@@ -295,12 +306,12 @@ const aiProcessingController = {
             ).catch((error) => {
               console.error("Error in streaming background task:", error);
               if (!baseController.isProcessingCancelled()) {
-                io.emit("streamError", { error: error.message });
+                backendEvents.emit("streamError", { error: error.message });
               }
             });
           } else {
             // Use the traditional approach (non-streaming)
-            io.emit("update", result);
+            backendEvents.emit("update", result);
           }
         }
 
@@ -315,8 +326,8 @@ const aiProcessingController = {
         fileToProcess
       );
       if (!baseController.isProcessingCancelled()) {
-        io.emit("error", errorResult.error);
-        io.emit("update", errorResult);
+        backendEvents.emit("error", errorResult.error);
+        backendEvents.emit("update", errorResult);
       }
     }
 
@@ -324,7 +335,7 @@ const aiProcessingController = {
   },
 
   // Stream response for an existing transcript
-  streamResponse: async (req, res, io) => {
+  streamResponse: async (req, res) => {
     // Parse and prepare request parameters
     const params = baseController.prepareRequestParams(req.body);
     const transcript = req.body.transcript;
@@ -336,13 +347,12 @@ const aiProcessingController = {
     if (!transcript) {
       const errorMsg = "No transcript available for streaming";
       console.error(errorMsg);
-      io.emit("error", errorMsg);
+      backendEvents.emit("error", errorMsg); // Use backendEvents here too
       return res.status(400).send(errorMsg);
     }
 
     const streamResult = await tryCatch(
       streamResponseToClient(
-        io,
         transcript,
         params.lang,
         params.questionContext,
@@ -353,7 +363,9 @@ const aiProcessingController = {
     if (streamResult.error) {
       console.error("Error in streaming background task:", streamResult.error);
       if (!baseController.isProcessingCancelled()) {
-        io.emit("streamError", { error: streamResult.error.message });
+        backendEvents.emit("streamError", {
+          error: streamResult.error.message,
+        });
       }
       res.status(500).send("Error starting streaming");
     } else {

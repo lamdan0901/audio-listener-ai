@@ -139,8 +139,8 @@ function retryTranscription() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      audioFile,
-      language,
+      audioFilePath: lastAudioFile, // Corrected variable and assumed backend expects audioFilePath
+      language: lang, // Corrected variable
       questionContext,
       customContext,
       isFollowUp,

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "AI Recording Assistant Extension",
+  "version": "1.0",
+  "description": "Chrome extension for interacting with the AI Recording Assistant.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "http://localhost:3033/*",
+    "audioCapture"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/logo.png",
+      "48": "images/logo.png",
+      "128": "images/logo.png"
+    }
+  },
+  "icons": {
+    "16": "images/logo.png",
+    "48": "images/logo.png",
+    "128": "images/logo.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": ["http://localhost:3033/*"]
+}

@@ -1,60 +1,30 @@
 const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const { tryCatch } = require("../lib/tryCatch");
 const { cleanupAudioFiles } = require("./audio-processor");
 
 /**
- * Get FFmpeg command arguments based on platform
+ * Get FFmpeg command arguments for converting an audio file to the standard format
+ * @param {string} inputFile - Path to the input audio file
+ * @param {string} outputFile - Path to the output audio file
+ * @param {Object} options - Additional options
+ * @returns {Array} - FFmpeg command arguments
  */
-function getFfmpegArgs(outputFile, options = {}) {
-  const args = ["-y", "-hide_banner"];
-  // Default options with fallbacks
-  const settings = {
-    duration: options.duration || 90,
-  };
+function getConversionArgs(inputFile, outputFile, options = {}) {
+  const args = ["-y", "-hide_banner", "-loglevel", "info"];
 
-  console.log(`Recording settings: Duration=${settings.duration}s`);
+  // Add input file
+  args.push("-i", inputFile);
 
-  // Configure platform-specific settings
-  switch (process.platform) {
-    case "win32":
-      // On Windows, use a more reliable approach
-      // Set higher log level to help with debugging
-      args.push("-loglevel", "info");
-
-      // Try to use virtual-audio-capturer which is common for system audio
-      console.log("Attempting to use Windows virtual-audio-capturer");
-      args.push(
-        "-f",
-        "dshow",
-        "-rtbufsize",
-        "100M", // Use a larger buffer for more reliability
-        "-i",
-        "audio=virtual-audio-capturer",
-        "-sample_rate",
-        "16000",
-        "-channels",
-        "1"
-      );
-      break;
-    case "linux":
-      args.push("-loglevel", "error");
-      args.push("-f", "pulse", "-i", "default");
-      break;
-    default:
-      args.push("-loglevel", "error");
-      throw new Error("Unsupported platform");
-  }
-
-  // Set standard audio settings with 16000 Hz sample rate
+  // Set standard audio settings with 16000 Hz sample rate for speech recognition
   args.push(
     "-ac",
-    "1",
+    "1", // Mono audio
     "-ar",
-    "16000", // Standard sample rate for speech recognition
+    "16000", // 16kHz sample rate (standard for speech recognition)
     "-acodec",
-    "pcm_s16le",
-    "-t",
-    settings.duration.toString(),
+    "pcm_s16le", // PCM 16-bit little-endian format
     outputFile
   );
 
@@ -62,52 +32,97 @@ function getFfmpegArgs(outputFile, options = {}) {
 }
 
 /**
- * Check if FFmpeg is available in the system
+ * Convert an uploaded audio file to the standard format for speech recognition
+ * @param {string} inputFile - Path to the input audio file
+ * @returns {Promise<string>} - Path to the converted audio file
  */
-function checkFFmpegAvailability() {
-  return tryCatch(
-    new Promise((resolve, reject) => {
-      const result = spawn("ffmpeg", ["-version"]);
+async function convertAudioToStandardFormat(inputFile) {
+  // Generate output filename with .wav extension
+  const outputFile = path.join(
+    path.dirname(inputFile),
+    `${path.basename(inputFile, path.extname(inputFile))}_converted.wav`
+  );
 
-      result.on("error", (err) => {
-        console.error("FFmpeg not available:", err.message);
-        console.error(
-          "Please ensure FFmpeg is installed and available in your PATH"
-        );
-        process.exit(1);
-      });
+  console.log(`Converting audio file: ${inputFile} -> ${outputFile}`);
 
-      result.stderr.on("data", (data) => {
-        console.error(`FFmpeg check stderr: ${data}`);
-      });
+  const args = getConversionArgs(inputFile, outputFile);
 
-      result.stdout.on("data", (data) => {
-        console.log(`FFmpeg available: ${data.toString().split("\n")[0]}`);
-        resolve(true);
-      });
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn("ffmpeg", args);
 
-      result.on("close", (code) => {
-        if (code === 0) {
-          resolve(true);
-        } else {
-          reject(new Error(`FFmpeg check exited with code ${code}`));
-        }
-      });
-    })
-  ).then((result) => {
-    if (result.error) {
-      console.error("FFmpeg check failed:", result.error.message);
-      console.error(
-        "Please ensure FFmpeg is installed and available in your PATH"
-      );
-      process.exit(1);
-    }
-    return result.data;
+    ffmpeg.stderr.on("data", (data) => {
+      // FFmpeg outputs progress information to stderr
+      console.log(`FFmpeg: ${data.toString().trim()}`);
+    });
+
+    ffmpeg.on("close", (code) => {
+      if (code === 0) {
+        console.log(`Audio conversion successful: ${outputFile}`);
+        resolve(outputFile);
+      } else {
+        reject(new Error(`FFmpeg conversion failed with code ${code}`));
+      }
+    });
+
+    ffmpeg.on("error", (err) => {
+      reject(new Error(`FFmpeg error: ${err.message}`));
+    });
   });
 }
 
+/**
+ * Check if FFmpeg is available in the system
+ * @returns {Promise<boolean>} - True if FFmpeg is available
+ */
+async function checkFFmpegAvailability() {
+  return new Promise((resolve, reject) => {
+    const result = spawn("ffmpeg", ["-version"]);
+
+    result.on("error", (err) => {
+      console.warn("FFmpeg not available:", err.message);
+      console.warn("Some audio format conversions may not work properly");
+      reject(err);
+    });
+
+    result.stderr.on("data", (data) => {
+      console.warn(`FFmpeg check stderr: ${data}`);
+    });
+
+    result.stdout.on("data", (data) => {
+      console.log(`FFmpeg available: ${data.toString().split("\n")[0]}`);
+      resolve(true);
+    });
+
+    result.on("close", (code) => {
+      if (code === 0) {
+        resolve(true);
+      } else {
+        reject(new Error(`FFmpeg check exited with code ${code}`));
+      }
+    });
+  });
+}
+
+/**
+ * Determine if an audio file needs conversion based on its format
+ * @param {string} filePath - Path to the audio file
+ * @returns {boolean} - True if the file needs conversion
+ */
+function needsConversion(filePath) {
+  // Get the file extension
+  const ext = path.extname(filePath).toLowerCase();
+
+  // List of formats that don't need conversion (already in optimal format)
+  const optimalFormats = [".wav"];
+
+  // Check if the file is already in an optimal format
+  return !optimalFormats.includes(ext);
+}
+
 module.exports = {
-  getFfmpegArgs,
+  getConversionArgs,
+  convertAudioToStandardFormat,
   checkFFmpegAvailability,
   cleanupAudioFiles,
+  needsConversion,
 };

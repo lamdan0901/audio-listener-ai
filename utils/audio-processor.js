@@ -4,7 +4,30 @@ const { tryCatch } = require("../lib/tryCatch");
 const { createSpeechClient } = require("../lib/ai-client");
 
 // Initialize AssemblyAI client
-const speechClient = createSpeechClient();
+let speechClient;
+try {
+  speechClient = createSpeechClient();
+  console.log("AssemblyAI client initialized successfully");
+} catch (error) {
+  console.error("Failed to initialize AssemblyAI client:", error.message);
+  // We'll handle this error when transcription is attempted
+}
+
+// Create a promise with timeout function
+function promiseWithTimeout(promise, timeoutMs, errorMessage) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(
+        new Error(errorMessage || `Operation timed out after ${timeoutMs}ms`)
+      );
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() =>
+    clearTimeout(timeoutId)
+  );
+}
 
 /**
  * Validates audio file existence and checks for potential issues
@@ -32,6 +55,11 @@ function validateAndReadAudioFile(filePath) {
 
 /**
  * Transcribe audio file using AssemblyAI
+ * @param {string} filePath - Path to the audio file
+ * @param {string} languageCode - Language code for transcription
+ * @param {Object} options - Additional options for transcription
+ * @param {number} retries - Number of retries if transcription fails
+ * @returns {Promise<string>} - Transcribed text
  */
 async function transcribeAudio(
   filePath,
@@ -39,12 +67,49 @@ async function transcribeAudio(
   options = {},
   retries = 3
 ) {
+  // Check if AssemblyAI client was initialized successfully
+  if (!speechClient) {
+    const error = new Error(
+      "AssemblyAI client is not initialized. Check your API key and network connection."
+    );
+    console.error(error.message);
+
+    // If we have retries left, wait a bit and try again (might be a temporary issue)
+    if (retries > 0) {
+      console.log(
+        `Retrying client initialization (${retries} attempts left)...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+
+      try {
+        speechClient = createSpeechClient();
+        console.log("AssemblyAI client initialized successfully on retry");
+      } catch (initError) {
+        console.error(
+          "Failed to initialize AssemblyAI client on retry:",
+          initError.message
+        );
+      }
+
+      return transcribeAudio(filePath, languageCode, options, retries - 1);
+    }
+
+    throw error;
+  }
+
   const result = await tryCatch(
     (async () => {
       // Validate and read audio file
-      validateAndReadAudioFile(filePath);
+      try {
+        validateAndReadAudioFile(filePath);
+      } catch (fileError) {
+        console.error(`File validation error: ${fileError.message}`);
+        throw fileError; // Re-throw to be caught by tryCatch
+      }
 
       console.log(`Attempting transcription for file: ${filePath}`);
+      console.log(`File size: ${fs.statSync(filePath).size} bytes`);
+      console.log(`File path: ${path.resolve(filePath)}`);
 
       // Set up speech recognition config
       const isRetryAttempt = options.retryAttempt || false;
@@ -89,20 +154,87 @@ async function transcribeAudio(
       }
 
       console.log(`Using speech model: ${params.speech_model}`);
+      console.log("Sending request to AssemblyAI...");
 
-      // Execute the transcription
-      const transcript = await speechClient.transcripts.transcribe(params);
+      try {
+        // Execute the transcription with a timeout
+        const transcriptionPromise =
+          speechClient.transcripts.transcribe(params);
+        const transcript = await promiseWithTimeout(
+          transcriptionPromise,
+          60000, // 60 second timeout
+          "AssemblyAI transcription request timed out after 60 seconds"
+        );
 
-      console.log(
-        `Transcription successful with model: ${params.speech_model}`
-      );
-      return transcript.text;
+        console.log(
+          `Transcription successful with model: ${params.speech_model}`
+        );
+
+        if (!transcript || !transcript.text) {
+          console.warn("Warning: Received empty transcript from AssemblyAI");
+          return ""; // Return empty string instead of null/undefined
+        }
+
+        return transcript.text;
+      } catch (transcriptionError) {
+        console.error(
+          `AssemblyAI transcription error: ${transcriptionError.message}`
+        );
+
+        // Add more detailed error information
+        if (transcriptionError.message.includes("timed out")) {
+          console.error(
+            "The request to AssemblyAI timed out. This could be due to network issues or service problems."
+          );
+        } else if (transcriptionError.message.includes("401")) {
+          console.error(
+            "Authentication error with AssemblyAI. Check your API key."
+          );
+        } else if (transcriptionError.message.includes("429")) {
+          console.error(
+            "Rate limit exceeded with AssemblyAI. You may need to upgrade your plan or wait before trying again."
+          );
+        }
+
+        throw transcriptionError; // Re-throw to be caught by tryCatch
+      }
     })()
   );
 
   if (result.error) {
     console.error("Error in transcription:", result.error);
 
+    // Implement a fallback mechanism for empty or failed transcriptions
+    if (
+      result.error.message.includes("timed out") ||
+      result.error.message.includes("network") ||
+      result.error.message.includes("empty")
+    ) {
+      console.log("Using fallback mechanism for failed transcription");
+
+      // If this is a retry with a different model, we might want to try yet another approach
+      if (retries > 0) {
+        console.log(`Retrying transcription (${retries} attempts left)...`);
+
+        // Try again with different settings
+        const newOptions = {
+          ...options,
+          retryAttempt: true,
+          attemptNumber: (options.attemptNumber || 0) + 1,
+        };
+
+        // Wait a bit before retrying to avoid overwhelming the service
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        return transcribeAudio(filePath, languageCode, newOptions, retries - 1);
+      }
+
+      // If we're out of retries, return a placeholder message
+      console.log("Out of retries, returning placeholder message");
+      return ""; // Return empty string to indicate no transcription was possible
+    }
+
+    // For other types of errors, retry if we have attempts left
     if (retries > 0) {
       console.log(`Retrying transcription (${retries} attempts left)...`);
 
@@ -112,6 +244,9 @@ async function transcribeAudio(
         retryAttempt: true,
         attemptNumber: (options.attemptNumber || 0) + 1,
       };
+
+      // Wait a bit before retrying
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       return transcribeAudio(filePath, languageCode, newOptions, retries - 1);
     }

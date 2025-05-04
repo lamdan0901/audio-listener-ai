@@ -1,8 +1,13 @@
 const fs = require("fs");
 const path = require("path");
-const { cleanupAudioFiles } = require("../utils/ffmpeg");
+const {
+  cleanupAudioFiles,
+  convertAudioToStandardFormat,
+  needsConversion,
+} = require("../utils/ffmpeg");
 const baseController = require("./baseController");
 const { tryCatch } = require("../lib/tryCatch");
+const backendEvents = require("../lib/events");
 
 /**
  * Set up the recording directory and prepare output file
@@ -81,20 +86,20 @@ function cleanupEmptyOutputFile() {
 /**
  * Validate that the audio file exists and has content
  * @param {string} filePath - Path to the audio file
- * @returns {Promise<void>}
+ * @returns {Promise<string>} - Path to the validated (and possibly converted) audio file
  */
 async function validateAudioFile(filePath) {
   // File validation
   if (!filePath) {
-    console.error("No recording file was provided");
-    throw new Error("No recording file was created");
+    console.error("No audio file was provided");
+    throw new Error("No audio file was provided");
   }
 
   // Check if the file exists
   console.log(`Checking if file exists: ${filePath}`);
   if (!fs.existsSync(filePath)) {
     console.error(`File does not exist: ${filePath}`);
-    throw new Error("Recording file not found");
+    throw new Error("Audio file not found");
   }
 
   // Check file size - if it's empty, wait a bit and check again (could be delayed write)
@@ -105,7 +110,29 @@ async function validateAudioFile(filePath) {
     await waitForFileContent(filePath);
   }
 
+  // Check if the file needs conversion to a standard format
+  if (needsConversion(filePath)) {
+    try {
+      console.log(`File format needs conversion: ${filePath}`);
+      backendEvents.emit("processing", {
+        message: "Converting audio format...",
+      });
+
+      // Convert the file to a standard format
+      const convertedFilePath = await convertAudioToStandardFormat(filePath);
+      console.log(`File converted successfully: ${convertedFilePath}`);
+
+      // Return the path to the converted file
+      return convertedFilePath;
+    } catch (error) {
+      console.error(`Error converting audio file: ${error.message}`);
+      // If conversion fails, continue with the original file
+      console.log("Proceeding with original file format");
+    }
+  }
+
   console.log("File validation successful, proceeding with processing");
+  return filePath;
 }
 
 /**

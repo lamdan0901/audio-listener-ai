@@ -1,167 +1,66 @@
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
-const { getFfmpegArgs } = require("../utils/ffmpeg");
 const baseController = require("./baseController");
 const fileController = require("./fileController");
 const { tryCatch } = require("../lib/tryCatch");
+const backendEvents = require("../lib/events");
 
-// FFmpeg process reference
-let ffmpegProcess = null;
+/**
+ * Process an uploaded audio file
+ * @param {string} filePath - Path to the uploaded audio file
+ * @param {Object} params - Processing parameters
+ * @returns {Promise<boolean>} - Success status
+ */
+async function processUploadedAudio(filePath, params) {
+  console.log(`Processing uploaded audio file: ${filePath}`);
 
-// Start the FFmpeg process and set up all event handlers
-function startFFmpegProcess(io, options = {}) {
-  const currentOutputFile = baseController.getCurrentOutputFile();
-  const ffmpegArgs = getFfmpegArgs(currentOutputFile, options);
-  console.log("Starting FFmpeg with args:", ffmpegArgs.join(" "));
+  try {
+    // Validate the uploaded file and convert if necessary
+    const validatedFilePath = await fileController.validateAudioFile(filePath);
 
-  // Spawn FFmpeg process for audio capture
-  ffmpegProcess = spawn("ffmpeg", ffmpegArgs);
+    // Set the current file for processing
+    baseController.setCurrentOutputFile(validatedFilePath);
+    baseController.setLastProcessedFile(validatedFilePath);
 
-  setupFFmpegErrorHandling(io);
-  setupFFmpegProcessEvents(io);
-}
+    // Get reference to the transcription controller
+    const transcriptionController = require("./transcriptionController");
 
-// Set up stderr handling for FFmpeg
-function setupFFmpegErrorHandling(io) {
-  let startupErrorDetected = false;
+    // Process the audio with the transcription controller
+    const transcriptionOptions = {
+      questionContext: params.questionContext,
+      customContext: params.customContext,
+      isFollowUp: params.isFollowUp,
+    };
 
-  ffmpegProcess.stderr.on("data", (d) => {
-    const message = d.toString();
-
-    // Check if this is progress information (contains size=, time=, etc.)
-    const isProgressInfo =
-      message.includes("size=") &&
-      message.includes("time=") &&
-      message.includes("bitrate=");
-
-    // Check if this is metadata information
-    const isMetadata =
-      message.includes("Metadata:") || message.includes("encoder");
-
-    // Only log as error if it's not progress info or metadata
-    if (!isProgressInfo && !isMetadata) {
-      console.error("Information from FFmpeg:", message);
-
-      // Look for specific error patterns that indicate audio device issues
-      const errorPatterns = [
-        "No such filter",
-        "Invalid argument",
-        "Could not find",
-        "Device not found",
-        "Cannot open",
-        "Failed to read",
-        "Error opening",
-        "Input/output error",
-        "does not exist",
-        "Could not open",
-        "not found",
-        "No such device",
-      ];
-
-      // Check if any error pattern matches
-      const hasError = errorPatterns.some((pattern) =>
-        message.includes(pattern)
+    // Process the audio to get the transcript using the validated file
+    const transcriptionResult =
+      await transcriptionController.processTranscription(
+        validatedFilePath,
+        params,
+        transcriptionOptions
       );
 
-      if (hasError && !startupErrorDetected) {
-        startupErrorDetected = true; // Prevent multiple error messages
-        baseController.setIsRecording(false); // Reset recording state
-
-        sendAppropriateErrorMessage(message, io);
-        cleanupRecordingResources();
-      }
-    } else {
-      // For progress information, log at debug level or just skip logging
-      if (isProgressInfo) {
-        // Optional: log progress at debug level
-        // console.debug("FFmpeg Progress:", message.trim());
-      } else if (isMetadata) {
-        // Optional: log metadata at info level
-        // console.info("FFmpeg Metadata:", message.trim());
-      }
+    // If transcription failed or was cancelled, exit early
+    if (transcriptionResult === null) {
+      return false;
     }
-  });
-}
 
-// Send different error messages based on the error type
-function sendAppropriateErrorMessage(error, io) {
-  if (
-    error.includes("Device not found") ||
-    error.includes("Could not find") ||
-    error.includes("not found")
-  ) {
-    io.emit(
-      "error",
-      "Audio capture device not found. Check your audio settings."
+    // Get reference to the AI processing controller
+    const aiProcessingController = require("./aiProcessingController");
+
+    // Handle the transcription result with the validated file
+    await aiProcessingController.handleTranscriptionResult(
+      transcriptionResult,
+      params,
+      validatedFilePath
     );
-  } else if (error.includes("Access denied") || error.includes("Permission")) {
-    io.emit(
-      "error",
-      "Permission denied accessing audio device. Check your permissions."
-    );
-  } else {
-    io.emit(
-      "error",
-      "Audio capture device not working properly. Try restarting the application."
-    );
+
+    return true;
+  } catch (error) {
+    console.error("Error processing uploaded audio:", error);
+    backendEvents.emit("error", `Error processing audio: ${error.message}`);
+    return false;
   }
-}
-
-// Set up event handlers for the FFmpeg process
-function setupFFmpegProcessEvents(io) {
-  ffmpegProcess.on("error", (err) => handleFFmpegProcessError(err, io));
-  ffmpegProcess.on("close", handleFFmpegProcessClose);
-}
-
-// Handle errors from the FFmpeg process
-function handleFFmpegProcessError(err, io) {
-  console.error("FFmpeg Process Error:", err);
-  io.emit("error", "Failed to start audio capture");
-  baseController.setIsRecording(false);
-  fileController.cleanupOutputFile();
-}
-
-// Handle the FFmpeg process closing
-function handleFFmpegProcessClose(code) {
-  console.log(`FFmpeg exited with code ${code}`);
-  baseController.setIsRecording(false);
-
-  if (code !== 0 && code !== null) {
-    console.error(`FFmpeg exited with code ${code}`);
-    fileController.cleanupEmptyOutputFile();
-  }
-
-  baseController.setCurrentOutputFile(null);
-}
-
-// Clean up all recording resources (process and file)
-function cleanupRecordingResources() {
-  if (ffmpegProcess) {
-    tryCatch(Promise.resolve(ffmpegProcess.kill("SIGTERM"))).then((result) => {
-      if (result.error) {
-        console.error("Error killing ffmpeg process:", result.error);
-      }
-    });
-  }
-
-  fileController.cleanupOutputFile();
-}
-
-// Stop the FFmpeg recording process and clean up state
-async function stopRecordingProcess() {
-  // Safely stop ffmpeg process first
-  if (ffmpegProcess) {
-    console.log("Stopping FFmpeg process");
-    ffmpegProcess.kill("SIGINT");
-
-    // Allow a little time for the process to close and write final data
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-
-  // Now handle state cleanup
-  baseController.setIsRecording(false);
-  baseController.setCurrentOutputFile(null); // Clear it to prevent race conditions
 }
 
 // Controller methods
@@ -171,78 +70,115 @@ const recordingController = {
     return baseController.getStatus();
   },
 
-  // Start a new recording session
-  startRecording: (req, res, io) => {
-    if (baseController.getIsRecording()) {
-      return res.status(400).send("Already recording");
+  // Handle uploaded audio file from frontend
+  handleAudioUpload: async (req, res) => {
+    console.log("Audio file upload received from frontend");
+
+    // Check if we received a file
+    if (!req.file) {
+      console.error("No file was uploaded");
+      return res.status(400).send("No audio file was uploaded");
     }
 
-    tryCatch(
-      (async () => {
-        // Reset retry count for new recording
-        baseController.setRetryCount(0);
+    // Get the uploaded file path
+    const uploadedFilePath = req.file.path;
+    console.log(`File uploaded to: ${uploadedFilePath}`);
 
-        // Clean up any existing audio files first
-        fileController.cleanupExistingAudioFiles();
-
-        // Set up new recording environment
-        fileController.setupRecordingEnvironment();
-
-        // Start FFmpeg with options from the request
-        const options = {
-          duration: req.body.duration || 30,
-        };
-
-        startFFmpegProcess(io, options);
-        baseController.setIsRecording(true);
-
-        return true;
-      })()
-    ).then((result) => {
-      if (result.error) {
-        console.error("Error starting recording:", result.error);
-        res
-          .status(500)
-          .send(`Error starting recording: ${result.error.message}`);
-        cleanupRecordingResources();
-      } else {
-        res.status(200).send("Recording started");
-      }
+    // Parse parameters from the request body
+    const params = baseController.prepareRequestParams({
+      ...req.body,
+      audioFile: uploadedFilePath,
     });
-  },
 
-  // Cancel any ongoing recording
-  cancelRecording: async (req, res, io) => {
-    console.log("Cancelling current recording");
+    // Reset retry count for new upload
+    baseController.setRetryCount(0);
 
-    const result = await tryCatch(
-      (async () => {
-        // If recording is in progress, stop it
-        if (baseController.getIsRecording()) {
-          console.log("Stopping active recording due to cancellation");
-          await stopRecordingProcess();
-          baseController.setIsRecording(false);
+    // Inform client that we're processing
+    backendEvents.emit("processing");
+
+    try {
+      // Process the uploaded audio
+      const processingResult = await tryCatch(
+        processUploadedAudio(uploadedFilePath, params)
+      );
+
+      if (processingResult.error) {
+        console.error(
+          "Error processing uploaded audio:",
+          processingResult.error
+        );
+        const errorResult = baseController.handleProcessingError(
+          processingResult.error,
+          params.lang,
+          uploadedFilePath
+        );
+
+        if (!baseController.isProcessingCancelled()) {
+          backendEvents.emit("error", errorResult.error);
+          backendEvents.emit("update", errorResult);
         }
 
-        // Cleanup any current resources
-        cleanupRecordingResources();
+        return res.status(500).json({
+          success: false,
+          error: `Error processing audio: ${processingResult.error.message}`,
+          errorDetails: errorResult,
+        });
+      }
 
-        return true;
-      })()
-    );
+      // Don't delete the file after processing - we store it for possible retry
+      await baseController.cleanupAfterProcessing(uploadedFilePath);
 
-    if (result.error) {
-      console.error("Error during recording cancellation:", result.error);
-      io.emit("error", "Error during recording cancellation");
-      res.status(500).send("Error during recording cancellation");
-    } else {
-      res.status(200).send("Recording cancelled");
+      // Return success response with more details
+      return res.status(200).json({
+        success: true,
+        message: "Audio processed successfully",
+        hasLastQuestion: true,
+        lastQuestionPreview:
+          baseController.getLastQuestion()?.substring(0, 50) + "...",
+      });
+    } catch (error) {
+      console.error("Unexpected error in handleAudioUpload:", error);
+      backendEvents.emit("error", `Unexpected error: ${error.message}`);
+
+      return res.status(500).json({
+        success: false,
+        error: `Unexpected error: ${error.message}`,
+      });
     }
   },
 
-  // Export these functions so they can be used by other controllers
-  stopRecordingProcess,
-  cleanupRecordingResources,
+  // Legacy method - Start a new recording session (kept for backward compatibility)
+  // Now just returns a message that clients should use the upload endpoint
+  startRecording: (_req, res) => {
+    console.log(
+      "startRecording endpoint called - informing client to use upload endpoint"
+    );
+    res
+      .status(400)
+      .send(
+        "Direct audio recording is no longer supported. Please upload audio files to the /upload endpoint instead."
+      );
+  },
+
+  // Cancel any ongoing processing
+  cancelRecording: async (_req, res) => {
+    console.log("Cancelling current processing");
+
+    // Set the cancellation flag
+    baseController.setCancelled(true);
+
+    // Emit cancellation event
+    backendEvents.emit("processingCancelled", {
+      message: "Processing cancelled by user",
+    });
+
+    res.status(200).send("Processing cancelled");
+  },
+
+  // Clean up resources (no longer needed for FFmpeg, but kept for file cleanup)
+  cleanupRecordingResources: () => {
+    fileController.cleanupOutputFile();
+  },
 };
 
 module.exports = recordingController;

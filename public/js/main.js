@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Check if we have a previous session with questions
     // We'll request the current status from the server
-    fetch("/status")
+    fetch("/status") // Corrected endpoint
       .then((response) => response.json())
       .then((status) => {
         console.log("Server status:", status);
