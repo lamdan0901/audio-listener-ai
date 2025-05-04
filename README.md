@@ -2,6 +2,14 @@
 
 A simple AI application that listens to audio and answers questions using speech-to-text and AI processing.
 
+## System Design Documentation
+
+This repository includes comprehensive system design documentation:
+
+- **[AudioListenerAI_SoftwareDesign.md](AudioListenerAI_SoftwareDesign.md)**: The main software design document that provides a detailed analysis of the system architecture, components, data flow, and design patterns.
+
+- **[diagrams/](diagrams/)**: A folder containing various diagrams that illustrate the architecture, components, and behavior of the system, including class diagrams, sequence diagrams, component diagrams, and more.
+
 ## Features
 
 - Record audio from your microphone
