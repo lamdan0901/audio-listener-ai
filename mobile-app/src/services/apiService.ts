@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { API_URL } from "@env"; // Import from @env
 
 // Check if API_URL is loaded correctly
@@ -19,6 +19,8 @@ interface RecordingParams {
   questionContext: string;
   customContext: string;
   isFollowUp: boolean;
+  audioSource?: string; // 'microphone' or 'system'
+  audioDeviceId?: string | null; // Selected audio device ID
 }
 
 interface RetryParams extends RecordingParams {
@@ -65,36 +67,79 @@ export const stopRecordingAndUpload = async (
   audioUri: string,
   params: RecordingParams
 ): Promise<boolean> => {
-  const url = `${API_BASE_URL}/recording/stop`;
+  // Use the upload endpoint instead of stop for better compatibility
+  const url = `${API_BASE_URL}/recording/upload`;
   console.log(`Calling API: POST ${url} with file: ${audioUri}`, params);
 
   try {
-    const uploadResult = await FileSystem.uploadAsync(url, audioUri, {
-      httpMethod: "POST",
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: "audio", // Matches the field name expected by multer on the backend
-      parameters: {
-        // Send other parameters as form fields
-        language: params.language,
-        questionContext: params.questionContext,
-        customContext: params.customContext,
-        isFollowUp: String(params.isFollowUp), // Convert boolean to string for form data
-      },
-      headers: {
-        // Add any necessary headers, e.g., Authorization
-      },
-    });
+    // Check if we're on web platform
+    if (Platform.OS === "web") {
+      // Web-specific implementation using fetch and FormData
+      console.log("Using web-specific upload implementation");
 
-    console.log("Upload Result:", uploadResult);
+      // For web, audioUri is a blob URL, so we need to fetch the blob first
+      const response = await fetch(audioUri);
+      const blob = await response.blob();
 
-    if (uploadResult.status >= 200 && uploadResult.status < 300) {
-      console.log("Audio uploaded successfully.");
-      // Backend should now emit socket events for processing, transcript, etc.
-      return true;
+      // Create FormData and append the blob as a file
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+
+      // Add other parameters as form fields
+      formData.append("language", params.language);
+      formData.append("questionContext", params.questionContext);
+      formData.append("customContext", params.customContext);
+      formData.append("isFollowUp", String(params.isFollowUp));
+      formData.append("audioSource", params.audioSource || "microphone");
+      formData.append("audioDeviceId", params.audioDeviceId || "");
+
+      // Send the FormData using fetch
+      const uploadResponse = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+
+      console.log("Upload Response:", uploadResponse);
+
+      if (uploadResponse.ok) {
+        console.log("Audio uploaded successfully via web implementation.");
+        return true;
+      } else {
+        throw new Error(
+          `Upload failed: ${uploadResponse.status} - ${uploadResponse.statusText}`
+        );
+      }
     } else {
-      throw new Error(
-        `Upload failed: ${uploadResult.status} - ${uploadResult.body}`
-      );
+      // Native platform implementation using expo-file-system
+      const uploadResult = await FileSystem.uploadAsync(url, audioUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "audio", // Matches the field name expected by multer on the backend
+        parameters: {
+          // Send other parameters as form fields
+          language: params.language,
+          questionContext: params.questionContext,
+          customContext: params.customContext,
+          isFollowUp: String(params.isFollowUp), // Convert boolean to string for form data
+          audioSource: params.audioSource || "microphone", // Include audio source
+          audioDeviceId: params.audioDeviceId || "", // Include device ID if available
+        },
+        headers: {
+          // Add any necessary headers, e.g., Authorization
+        },
+      });
+
+      console.log("Upload Result:", uploadResult);
+
+      if (uploadResult.status >= 200 && uploadResult.status < 300) {
+        console.log("Audio uploaded successfully.");
+        // Backend should now emit socket events for processing, transcript, etc.
+        return true;
+      } else {
+        throw new Error(
+          `Upload failed: ${uploadResult.status} - ${uploadResult.body}`
+        );
+      }
     }
   } catch (error) {
     console.error(
@@ -109,25 +154,65 @@ export const stopRecordingAndUpload = async (
 
 /**
  * Calls the backend endpoint to retry transcription for a given audio file.
+ * For web platform, we need to re-upload the audio file.
  */
 export const retryTranscriptionApi = async (
   params: RetryParams
 ): Promise<boolean> => {
-  const url = `${API_BASE_URL}/recording/retry`;
-  console.log(`Calling API: POST ${url}`, params);
   try {
-    // Assuming retry just needs the file path reference and params, not re-upload
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    // For web platform, we need to use the retry-upload endpoint with FormData
+    if (Platform.OS === "web" && window.lastRecordedAudioBlob) {
+      const url = `${API_BASE_URL}/recording/retry-upload`;
+      console.log(
+        `Calling API: POST ${url} with file re-upload for web platform`
+      );
+
+      // Create FormData and append the blob as a file
+      const formData = new FormData();
+      formData.append("audio", window.lastRecordedAudioBlob, "recording.webm");
+
+      // Add other parameters as form fields
+      formData.append("language", params.language);
+      formData.append("questionContext", params.questionContext);
+      formData.append("customContext", params.customContext);
+      formData.append("isFollowUp", String(params.isFollowUp));
+      formData.append("audioSource", params.audioSource || "microphone");
+      formData.append("audioDeviceId", params.audioDeviceId || "");
+
+      // Send the FormData using fetch
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log(
+        "Retry transcription API call successful (web implementation)."
+      );
+      return true;
+    } else {
+      // Native platform implementation using the standard retry endpoint
+      const url = `${API_BASE_URL}/recording/retry`;
+      console.log(`Calling API: POST ${url}`, params);
+
+      // Assuming retry just needs the file path reference and params, not re-upload
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log("Retry transcription API call successful.");
+      // Backend should emit socket events
+      return true;
     }
-    console.log("Retry transcription API call successful.");
-    // Backend should emit socket events
-    return true;
   } catch (error) {
     console.error("Error calling retry transcription API:", error);
     const message = error instanceof Error ? error.message : String(error);
@@ -138,25 +223,65 @@ export const retryTranscriptionApi = async (
 
 /**
  * Calls the backend endpoint to process audio with Gemini.
+ * For web platform, we need to re-upload the audio file.
  */
 export const processWithGeminiApi = async (
   params: GeminiParams
 ): Promise<boolean> => {
-  const url = `${API_BASE_URL}/ai/gemini`;
-  console.log(`Calling API: POST ${url}`, params);
   try {
-    // Assuming Gemini endpoint also just needs the file path reference
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    // For web platform, we need to use the gemini-upload endpoint with FormData
+    if (Platform.OS === "web" && window.lastRecordedAudioBlob) {
+      const url = `${API_BASE_URL}/recording/gemini-upload`;
+      console.log(
+        `Calling API: POST ${url} with file re-upload for web platform`
+      );
+
+      // Create FormData and append the blob as a file
+      const formData = new FormData();
+      formData.append("audio", window.lastRecordedAudioBlob, "recording.webm");
+
+      // Add other parameters as form fields
+      formData.append("language", params.language);
+      formData.append("questionContext", params.questionContext);
+      formData.append("customContext", params.customContext);
+      formData.append("isFollowUp", String(params.isFollowUp));
+      formData.append("audioSource", params.audioSource || "microphone");
+      formData.append("audioDeviceId", params.audioDeviceId || "");
+
+      // Send the FormData using fetch
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log(
+        "Process with Gemini API call successful (web implementation)."
+      );
+      return true;
+    } else {
+      // Native platform implementation using the standard Gemini endpoint
+      const url = `${API_BASE_URL}/ai/gemini`;
+      console.log(`Calling API: POST ${url}`, params);
+
+      // Assuming Gemini endpoint also just needs the file path reference
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log("Process with Gemini API call successful.");
+      // Backend should emit socket events
+      return true;
     }
-    console.log("Process with Gemini API call successful.");
-    // Backend should emit socket events
-    return true;
   } catch (error) {
     console.error("Error calling process with Gemini API:", error);
     const message = error instanceof Error ? error.message : String(error);

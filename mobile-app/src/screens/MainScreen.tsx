@@ -12,12 +12,17 @@ import {
   Alert,
   FlatList, // Import FlatList
   TouchableOpacity, // For list items
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Markdown from "react-native-markdown-display";
 import { Picker } from "@react-native-picker/picker";
 import { useSocket } from "../hooks/useSocket";
-import { useAudioRecorder } from "../hooks/useAudioRecorder";
+import {
+  useAudioRecorder,
+  AudioInputDevice,
+  AudioSourceType,
+} from "../hooks/useAudioRecorder";
 import {
   startRecordingApi,
   stopRecordingAndUpload,
@@ -26,6 +31,7 @@ import {
   cancelRequestApi,
   getStatusApi,
 } from "../services/apiService";
+import AudioDeviceSelector from "../components/AudioDeviceSelector";
 import { HistoryEntry } from "../types/history"; // Import history type
 import {
   // Import history utils
@@ -33,6 +39,7 @@ import {
   saveHistoryEntry,
   clearAllHistory,
 } from "../utils/historyManager";
+import { storeAudioBlob } from "../utils/webAudioUtils"; // Import web audio utilities
 
 // Define types
 type Status = "idle" | "recording" | "processing" | "error" | "connecting";
@@ -90,8 +97,19 @@ const MainScreen: React.FC = () => {
 
   // --- Hooks ---
   const { socketInstance, isConnected } = useSocket();
-  const { isRecording, startRecording, stopRecording, permissionResponse } =
-    useAudioRecorder();
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
+    permissionResponse,
+    audioDevices,
+    selectedDeviceId,
+    setAudioDevice,
+    refreshAudioDevices,
+    audioSource,
+    setAudioSource,
+    isSystemAudioSupported,
+  } = useAudioRecorder();
 
   // --- Effects ---
   useEffect(() => {
@@ -290,16 +308,205 @@ const MainScreen: React.FC = () => {
 
   // --- Action Handlers ---
   const handleToggleRecording = async () => {
-    /* ... existing code ... */
+    if (isRecording) {
+      // Stop recording
+      setIsLoading(true);
+      setLoadingMessage("Processing audio...");
+
+      try {
+        // Stop the recording and get the audio file URI
+        const audioUri = await stopRecording();
+
+        if (!audioUri) {
+          console.error("Failed to get audio URI after stopping recording");
+          setIsLoading(false);
+          Alert.alert(
+            "Recording Error",
+            "Failed to process the recorded audio."
+          );
+          return;
+        }
+
+        console.log(`Recording stopped, audio URI: ${audioUri}`);
+
+        // For web platform, store the audio blob for later use in retry/Gemini
+        if (Platform.OS === "web") {
+          await storeAudioBlob(audioUri);
+        }
+
+        // Signal the backend that we're stopping and upload the audio file
+        const params = {
+          language,
+          questionContext,
+          customContext,
+          isFollowUp,
+          audioSource, // Include the audio source
+          audioDeviceId: selectedDeviceId, // Include the selected device ID
+        };
+
+        // Set UI state for processing
+        setCanCancel(true);
+
+        // Upload the audio file to the backend
+        const success = await stopRecordingAndUpload(audioUri, params);
+
+        if (!success) {
+          console.error("Failed to upload audio to backend");
+          setIsLoading(false);
+          setCanCancel(false);
+          Alert.alert("Upload Error", "Failed to upload audio to the server.");
+        }
+
+        // Note: We don't set isLoading to false here because we're waiting for socket events
+      } catch (error) {
+        console.error("Error in stop recording flow:", error);
+        setIsLoading(false);
+        setCanCancel(false);
+        Alert.alert(
+          "Error",
+          "An error occurred while processing your recording."
+        );
+      }
+    } else {
+      // Start recording
+      try {
+        // Reset state for new recording
+        setQuestionText("");
+        setAnswerText("");
+        setCanRetry(false);
+        setCanUseGemini(false);
+
+        // Signal the backend that we're starting a new recording
+        const startParams = {
+          language,
+          questionContext,
+          customContext,
+          isFollowUp,
+          audioSource, // Include the audio source
+          audioDeviceId: selectedDeviceId, // Include the selected device ID
+        };
+
+        await startRecordingApi(startParams);
+
+        // Start the actual recording
+        await startRecording();
+
+        console.log("Recording started successfully");
+      } catch (error) {
+        console.error("Error starting recording:", error);
+        Alert.alert(
+          "Recording Error",
+          "Failed to start recording. Please try again."
+        );
+      }
+    }
   };
   const handleRetry = async () => {
-    /* ... existing code ... */
+    if (!lastAudioFile || !canRetry) {
+      console.warn(
+        "Cannot retry: No audio file available or retry not allowed"
+      );
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadingMessage("Retrying transcription...");
+    setCanCancel(true);
+
+    try {
+      const params = {
+        language,
+        questionContext,
+        customContext,
+        isFollowUp,
+        audioFilePath: lastAudioFile,
+        audioSource, // Include the audio source
+        audioDeviceId: selectedDeviceId, // Include the selected device ID
+      };
+
+      const success = await retryTranscriptionApi(params);
+
+      if (!success) {
+        setIsLoading(false);
+        setCanCancel(false);
+        Alert.alert(
+          "Retry Error",
+          "Failed to retry transcription. Please try again."
+        );
+      }
+      // Note: We don't set isLoading to false here because we're waiting for socket events
+    } catch (error) {
+      console.error("Error retrying transcription:", error);
+      setIsLoading(false);
+      setCanCancel(false);
+      Alert.alert("Error", "An error occurred while retrying transcription.");
+    }
   };
+
   const handleGemini = async () => {
-    /* ... existing code ... */
+    if (!lastAudioFile || !canUseGemini) {
+      console.warn(
+        "Cannot use Gemini: No audio file available or Gemini not allowed"
+      );
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadingMessage("Processing with Gemini AI...");
+    setCanCancel(true);
+
+    try {
+      const params = {
+        language,
+        questionContext,
+        customContext,
+        isFollowUp,
+        audioFile: lastAudioFile,
+        audioSource, // Include the audio source
+        audioDeviceId: selectedDeviceId, // Include the selected device ID
+      };
+
+      const success = await processWithGeminiApi(params);
+
+      if (!success) {
+        setIsLoading(false);
+        setCanCancel(false);
+        Alert.alert(
+          "Gemini Error",
+          "Failed to process with Gemini AI. Please try again."
+        );
+      }
+      // Note: We don't set isLoading to false here because we're waiting for socket events
+    } catch (error) {
+      console.error("Error processing with Gemini:", error);
+      setIsLoading(false);
+      setCanCancel(false);
+      Alert.alert(
+        "Error",
+        "An error occurred while processing with Gemini AI."
+      );
+    }
   };
   const handleCancel = async () => {
-    /* ... existing code ... */
+    if (!canCancel) {
+      console.warn("Cancel not allowed in current state");
+      return;
+    }
+
+    console.log("Cancelling current operation...");
+    isCancelledRef.current = true;
+
+    try {
+      await cancelRequestApi();
+      setIsLoading(false);
+      setCanCancel(false);
+      console.log("Request cancelled successfully");
+    } catch (error) {
+      console.error("Error cancelling request:", error);
+      // Still reset UI state even if the cancel request failed
+      setIsLoading(false);
+      setCanCancel(false);
+    }
   };
 
   const handleClearHistory = async () => {
@@ -344,37 +551,111 @@ const MainScreen: React.FC = () => {
       >
         <Text style={styles.title}>Audio Listener AI (Mobile)</Text>
 
-        {/* ... (Language, Context, Custom Context, Status, Follow-up, Buttons) ... */}
+        {/* Audio Device Selection */}
+        <View style={styles.section}>
+          <AudioDeviceSelector
+            audioDevices={audioDevices}
+            selectedDeviceId={selectedDeviceId}
+            onSelectDevice={setAudioDevice}
+            refreshDevices={refreshAudioDevices}
+            audioSource={audioSource}
+            onSelectSource={setAudioSource}
+            isSystemAudioSupported={isSystemAudioSupported}
+          />
+        </View>
+
         {/* Language Selection */}
         <View style={styles.section}>
           <Text style={styles.label}>Language:</Text>
-          {/* ... Switch ... */}
+          <View style={styles.switchContainer}>
+            <Text
+              style={
+                language === "en" ? styles.activeText : styles.inactiveText
+              }
+            >
+              English
+            </Text>
+            <Switch
+              value={language === "vi"}
+              onValueChange={(value) => setLanguage(value ? "vi" : "en")}
+              trackColor={{ false: "#767577", true: "#81b0ff" }}
+              thumbColor={language === "vi" ? "#007bff" : "#f4f3f4"}
+            />
+            <Text
+              style={
+                language === "vi" ? styles.activeText : styles.inactiveText
+              }
+            >
+              Vietnamese
+            </Text>
+          </View>
         </View>
 
         {/* Context Selection */}
         <View style={styles.section}>
           <Text style={styles.label}>Question Context:</Text>
           <View style={styles.pickerContainer}>
-            <Picker /* ... Picker Items ... */ />
+            <Picker
+              selectedValue={questionContext}
+              onValueChange={(value) =>
+                setQuestionContext(value as QuestionContext)
+              }
+              style={styles.picker}
+              dropdownIconColor="#007AFF"
+            >
+              <Picker.Item label="General" value="general" />
+              <Picker.Item label="Interview" value="interview" />
+              <Picker.Item
+                label="HTML/CSS/JavaScript"
+                value="html/css/javascript"
+              />
+              <Picker.Item label="TypeScript" value="typescript" />
+              <Picker.Item label="React.js" value="reactjs" />
+              <Picker.Item label="Next.js" value="nextjs" />
+            </Picker>
           </View>
         </View>
 
         {/* Custom Context */}
         <View style={styles.section}>
           <Text style={styles.label}>Custom Context:</Text>
-          <TextInput /* ... TextInput props ... */ />
+          <TextInput
+            style={styles.textArea}
+            placeholder="Enter custom context instructions for the AI..."
+            value={customContext}
+            onChangeText={setCustomContext}
+            multiline={true}
+            numberOfLines={3}
+          />
         </View>
 
         {/* Status Display */}
         <View style={styles.statusContainer}>
           {renderStatus()}
-          {/* ... ActivityIndicator ... */}
+          {isLoading && (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <ActivityIndicator
+                size="small"
+                color="#007bff"
+                style={styles.loader}
+              />
+              <Text style={styles.loadingText}>{loadingMessage}</Text>
+            </View>
+          )}
         </View>
 
         {/* Follow-up Checkbox */}
         <View style={[styles.section, styles.switchContainer]}>
-          <Text /* ... Text props ... */>Ask a follow-up question</Text>
-          <Switch /* ... Switch props ... */ />
+          <Text style={canFollowUp ? styles.activeText : styles.disabledText}>
+            Ask a follow-up question
+          </Text>
+          <Switch
+            value={isFollowUp}
+            onValueChange={(value) => setIsFollowUp(value)}
+            disabled={!canFollowUp}
+            trackColor={{ false: "#767577", true: "#81b0ff" }}
+            thumbColor={isFollowUp ? "#007bff" : "#f4f3f4"}
+          />
         </View>
 
         {/* Control Buttons */}
@@ -461,7 +742,70 @@ const MainScreen: React.FC = () => {
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  // ... (Keep existing styles: container, scrollContent, title, section, label, etc.)
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+    color: "#343a40",
+  },
+  section: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
+    color: "#495057",
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    marginTop: 5,
+  },
+  activeText: {
+    fontWeight: "bold",
+    color: "#007bff",
+    marginHorizontal: 8,
+  },
+  inactiveText: {
+    color: "#6c757d",
+    marginHorizontal: 8,
+  },
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 15,
+    backgroundColor: "#e9ecef",
+    padding: 10,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  buttonContainer: {
+    marginBottom: 20,
+    gap: 10,
+  },
+  resultText: {
+    fontSize: 16,
+    lineHeight: 24,
+    backgroundColor: "#f1f3f5",
+    padding: 10,
+    borderRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: "#007bff",
+  },
   pickerContainer: {
     borderWidth: 1,
     borderColor: "#ced4da",
