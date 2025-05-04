@@ -10,6 +10,7 @@ let mediaRecorder = null;
 let recordingStream = null;
 let audioChunks = [];
 let selectedDeviceId = null;
+let audioSource = "microphone"; // Default to microphone, can be "microphone" or "system"
 
 /**
  * Get supported MIME types for audio recording
@@ -86,38 +87,242 @@ function getSelectedAudioDevice() {
 }
 
 /**
- * Starts recording audio from the user's microphone
+ * Sets the audio source to use for recording
+ * @param {string} source - The audio source ('microphone' or 'system')
+ */
+function setAudioSource(source) {
+  if (source !== "microphone" && source !== "system") {
+    console.error(`Invalid audio source: ${source}`);
+    return;
+  }
+
+  console.log(`Setting audio source: ${source}`);
+  audioSource = source;
+}
+
+/**
+ * Gets the currently selected audio source
+ * @returns {string} - The selected audio source ('microphone' or 'system')
+ */
+function getAudioSource() {
+  return audioSource;
+}
+
+/**
+ * Starts recording audio from the selected source (microphone or system audio)
  * @returns {Promise<boolean>} - Promise resolving to true if recording started successfully
  */
 async function startRecording() {
   try {
-    console.log("Starting audio recording...");
+    console.log(`Starting audio recording from ${audioSource}...`);
 
     // Reset recording state
     audioChunks = [];
 
-    // Request microphone access with specific constraints for better quality
-    const constraints = {
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: 16000, // 16kHz sample rate for speech recognition
-        channelCount: 1, // Mono audio
-      },
-    };
+    let stream;
 
-    // If a specific device is selected, add it to constraints
-    if (selectedDeviceId) {
-      console.log(`Using selected audio device: ${selectedDeviceId}`);
-      constraints.audio.deviceId = { exact: selectedDeviceId };
+    // Get audio stream based on selected source
+    if (audioSource === "microphone") {
+      // Request microphone access with specific constraints for better quality
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000, // 16kHz sample rate for speech recognition
+          channelCount: 1, // Mono audio
+        },
+      };
+
+      // If a specific device is selected, add it to constraints
+      if (selectedDeviceId) {
+        console.log(`Using selected audio device: ${selectedDeviceId}`);
+        constraints.audio.deviceId = { exact: selectedDeviceId };
+      }
+
+      console.log(
+        "Requesting microphone access with constraints:",
+        JSON.stringify(constraints)
+      );
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } else if (audioSource === "system") {
+      try {
+        // Check if getDisplayMedia is supported
+        if (
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getDisplayMedia
+        ) {
+          throw new Error(
+            "System audio capture is not supported in this browser"
+          );
+        }
+
+        // Check if we're in Electron
+        const isElectron =
+          window.navigator.userAgent.toLowerCase().indexOf("electron") > -1;
+
+        // Display a message to the user
+        const status = document.getElementById("status");
+        if (status) {
+          status.className = "status recording";
+          status.textContent = "Status: Requesting system audio...";
+        }
+
+        // If we're in Electron with our custom implementation
+        if (
+          isElectron &&
+          window.electronAPI &&
+          window.electronAPI.isSystemAudioCaptureSupported &&
+          window.electronAPI.isSystemAudioCaptureSupported()
+        ) {
+          console.log(
+            "Using Electron's desktopCapturer for system audio capture"
+          );
+
+          // Request display media with audio - this will be intercepted by our handler in main.ts
+          const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true, // We need video to be true to get the system audio option
+            audio: true,
+          });
+
+          // Check if we got audio tracks
+          const audioTracks = displayStream.getAudioTracks();
+          if (audioTracks.length === 0) {
+            throw new Error("No system audio tracks received from Electron");
+          }
+
+          console.log(
+            `Received ${audioTracks.length} audio tracks from system`
+          );
+
+          // We only need the audio tracks, stop the video tracks
+          displayStream.getVideoTracks().forEach((track) => {
+            console.log(`Stopping video track: ${track.label}`);
+            track.stop();
+          });
+
+          // Create a new stream with only audio tracks
+          stream = new MediaStream(audioTracks);
+
+          console.log("System audio capture started successfully via Electron");
+
+          if (status) {
+            status.textContent = "Status: Recording system audio...";
+          }
+        } else {
+          // Standard browser approach (fallback)
+          console.log(
+            "Attempting standard system audio capture via getDisplayMedia"
+          );
+
+          // Display a message to the user about what to select
+          if (status) {
+            status.textContent =
+              "Status: Please select 'Share system audio' in the dialog";
+          }
+
+          // Request display media with audio
+          const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true, // We need video to be true to get the system audio option
+            audio: true,
+          });
+
+          // Check if user selected to share audio
+          const audioTracks = displayStream.getAudioTracks();
+          if (audioTracks.length === 0) {
+            // User didn't select to share audio
+            console.warn(
+              "No audio track found in display media. User may not have selected to share system audio."
+            );
+
+            // Clean up the video tracks we don't need
+            displayStream.getVideoTracks().forEach((track) => track.stop());
+
+            // Show error message
+            if (status) {
+              status.className = "status error";
+              status.textContent =
+                "Error: System audio not selected. Please try again and select 'Share system audio'";
+            }
+
+            throw new Error("No system audio selected");
+          }
+
+          // We only need the audio tracks, stop the video tracks
+          displayStream.getVideoTracks().forEach((track) => track.stop());
+
+          // Create a new stream with only audio tracks
+          stream = new MediaStream(audioTracks);
+
+          console.log("System audio capture started successfully");
+        }
+      } catch (error) {
+        console.error("System audio capture error:", error.message);
+
+        // Show error message to user
+        const status = document.getElementById("status");
+        if (status) {
+          status.className = "status error";
+
+          // Check if we're in Electron to provide a more specific message
+          const isElectron =
+            window.navigator.userAgent.toLowerCase().indexOf("electron") > -1;
+
+          if (isElectron && error.message === "Not supported") {
+            status.textContent =
+              "Error: System audio capture is not supported in desktop apps. Falling back to microphone.";
+          } else {
+            status.textContent = `Error: ${error.message}. Falling back to microphone.`;
+          }
+        }
+
+        // Fall back to microphone
+        console.log("Falling back to microphone input...");
+        audioSource = "microphone"; // Reset to microphone
+
+        // Update radio buttons to reflect fallback
+        const micRadio = document.querySelector(
+          'input[name="audioSource"][value="microphone"]'
+        );
+        if (micRadio) {
+          micRadio.checked = true;
+        }
+
+        // Try again with microphone
+        const constraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 16000,
+            channelCount: 1,
+          },
+        };
+
+        // If a specific device is selected, add it to constraints
+        if (selectedDeviceId) {
+          console.log(`Using selected audio device: ${selectedDeviceId}`);
+          constraints.audio.deviceId = { exact: selectedDeviceId };
+        }
+
+        console.log(
+          "Falling back to microphone with constraints:",
+          JSON.stringify(constraints)
+        );
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        // Show device selection again since we're back to microphone
+        const deviceSelectionDiv = document.getElementById(
+          "audio-device-selection"
+        );
+        if (deviceSelectionDiv) {
+          deviceSelectionDiv.style.display = "block";
+        }
+      }
+    } else {
+      throw new Error(`Invalid audio source: ${audioSource}`);
     }
 
-    console.log(
-      "Requesting microphone access with constraints:",
-      JSON.stringify(constraints)
-    );
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
     recordingStream = stream;
 
     // Get the supported MIME type
@@ -348,6 +553,8 @@ window.audioRecorder = {
   getAudioDevices,
   setAudioDevice,
   getSelectedAudioDevice,
+  setAudioSource,
+  getAudioSource,
 };
 
 // Initialize by trying to get device list

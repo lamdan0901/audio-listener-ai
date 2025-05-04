@@ -6,6 +6,15 @@ import { contextBridge } from "electron";
 // Expose the API base URL loaded in the main process to the renderer process
 contextBridge.exposeInMainWorld("electronAPI", {
   getApiBaseUrl: () => process.env.API_BASE_URL,
+
+  // Add a method to check if system audio capture is supported
+  isSystemAudioCaptureSupported: () => {
+    // In Electron with our display media handler, system audio capture is supported
+    return true;
+  },
+
+  // Add a method to get the Electron version
+  getElectronVersion: () => process.versions.electron,
 });
 
 // No need to expose additional APIs for audio recording as it's handled in the renderer process

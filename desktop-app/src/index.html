@@ -239,6 +239,29 @@
       </label>
     </div>
 
+    <div id="audio-source-selection" style="margin-bottom: 10px">
+      <strong>Audio Source:</strong>
+      <label>
+        <input
+          type="radio"
+          name="audioSource"
+          value="microphone"
+          checked
+          onchange="selectAudioSource('microphone')"
+        />
+        Microphone
+      </label>
+      <label>
+        <input
+          type="radio"
+          name="audioSource"
+          value="system"
+          onchange="selectAudioSource('system')"
+        />
+        System Audio
+      </label>
+    </div>
+
     <div id="audio-device-selection" style="margin-bottom: 15px">
       <strong>Audio Input Device:</strong>
       <select id="audioDeviceSelect" onchange="selectAudioDevice(this.value)">

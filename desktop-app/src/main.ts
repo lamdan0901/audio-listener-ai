@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, Menu, desktopCapturer, session } from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 
@@ -103,6 +103,33 @@ function createWindow() {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // Set up the display media request handler for system audio capture
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    console.log("Display media request received");
+
+    // Get screen sources
+    desktopCapturer
+      .getSources({ types: ["screen"] })
+      .then((sources) => {
+        if (sources.length > 0) {
+          console.log(
+            `Found ${sources.length} screen sources, using first source`
+          );
+          // Use the first source and specify 'loopback' for system audio
+          callback({ video: sources[0], audio: "loopback" });
+        } else {
+          console.error("No screen sources found");
+          // Return an empty object instead of null to avoid TypeScript error
+          callback({});
+        }
+      })
+      .catch((err) => {
+        console.error("Error getting screen sources:", err);
+        // Return an empty object instead of null to avoid TypeScript error
+        callback({});
+      });
+  });
+
   createWindow();
 
   app.on("activate", function () {
