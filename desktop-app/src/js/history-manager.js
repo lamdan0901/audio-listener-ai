@@ -81,7 +81,13 @@ function saveToHistory(question, answer) {
     if (historyVisible) {
       loadHistoryDates();
       const dateSelect = document.getElementById("historyDateSelect");
-      if (dateSelect.value === getTodayHistoryKey() || !dateSelect.value) {
+      if (
+        dateSelect &&
+        (dateSelect.value === getTodayHistoryKey() || !dateSelect.value)
+      ) {
+        loadHistoryForDate(historyKey);
+      } else {
+        // If no date selector or it's not showing today's date, still refresh if visible
         loadHistoryForDate(historyKey);
       }
     }
@@ -97,12 +103,6 @@ function saveToHistory(question, answer) {
  */
 function loadHistoryDates() {
   const dateSelect = document.getElementById("historyDateSelect");
-  const currentValue = dateSelect.value;
-
-  // Clear previous options except the first one
-  while (dateSelect.options.length > 1) {
-    dateSelect.remove(1);
-  }
 
   // Get all keys from localStorage that match our prefix
   const historyKeys = [];
@@ -116,30 +116,40 @@ function loadHistoryDates() {
   // Sort keys in reverse chronological order (newest first)
   historyKeys.sort().reverse();
 
-  // Add options for each date
-  historyKeys.forEach((key) => {
-    const dateStr = key.replace(HISTORY_PREFIX, "");
-    const option = document.createElement("option");
+  // If we have a date selector, populate it
+  if (dateSelect) {
+    const currentValue = dateSelect.value;
 
-    // Format the date for display (YYYY-MM-DD to Month Day, Year)
-    const [year, month, day] = dateStr.split("-");
-    const date = new Date(year, month - 1, day);
-    const formattedDate = date.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
+    // Clear previous options except the first one
+    while (dateSelect.options.length > 1) {
+      dateSelect.remove(1);
+    }
+
+    // Add options for each date
+    historyKeys.forEach((key) => {
+      const dateStr = key.replace(HISTORY_PREFIX, "");
+      const option = document.createElement("option");
+
+      // Format the date for display (YYYY-MM-DD to Month Day, Year)
+      const [year, month, day] = dateStr.split("-");
+      const date = new Date(year, month - 1, day);
+      const formattedDate = date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      option.value = key;
+      option.textContent = formattedDate;
+      dateSelect.appendChild(option);
     });
 
-    option.value = key;
-    option.textContent = formattedDate;
-    dateSelect.appendChild(option);
-  });
-
-  // Restore selection or select today if available
-  if (currentValue && historyKeys.includes(currentValue)) {
-    dateSelect.value = currentValue;
-  } else if (historyKeys.includes(getTodayHistoryKey())) {
-    dateSelect.value = getTodayHistoryKey();
+    // Restore selection or select today if available
+    if (currentValue && historyKeys.includes(currentValue)) {
+      dateSelect.value = currentValue;
+    } else if (historyKeys.includes(getTodayHistoryKey())) {
+      dateSelect.value = getTodayHistoryKey();
+    }
   }
 
   return historyKeys.length > 0;
@@ -266,11 +276,18 @@ function deleteHistoryItem(id, dateKey, event) {
 
     // If the deleted date was selected, reset the view
     const dateSelect = document.getElementById("historyDateSelect");
-    if (dateSelect.value) {
+    if (dateSelect && dateSelect.value) {
       loadHistoryForDate(dateSelect.value);
     } else {
-      document.getElementById("history-list").innerHTML = "";
-      document.getElementById("history-detail").style.display = "none";
+      const historyList = document.getElementById("history-list");
+      if (historyList) {
+        historyList.innerHTML = "";
+      }
+
+      const detailPanel = document.getElementById("history-detail");
+      if (detailPanel) {
+        detailPanel.style.display = "none";
+      }
     }
   } else {
     // Save the updated history
@@ -281,7 +298,10 @@ function deleteHistoryItem(id, dateKey, event) {
 
     // If the deleted item was being viewed, clear the detail panel
     if (selectedHistoryItemId === id) {
-      document.getElementById("history-detail").style.display = "none";
+      const detailPanel = document.getElementById("history-detail");
+      if (detailPanel) {
+        detailPanel.style.display = "none";
+      }
       selectedHistoryItemId = null;
     }
   }
@@ -312,9 +332,21 @@ function clearAllHistory() {
   historyKeys.forEach((key) => localStorage.removeItem(key));
 
   // Reset the UI
-  document.getElementById("history-list").innerHTML = "";
-  document.getElementById("history-detail").style.display = "none";
-  document.getElementById("historyDateSelect").style.display = "none";
+  const historyList = document.getElementById("history-list");
+  if (historyList) {
+    historyList.innerHTML = "";
+  }
+
+  const detailPanel = document.getElementById("history-detail");
+  if (detailPanel) {
+    detailPanel.style.display = "none";
+  }
+
+  const dateSelect = document.getElementById("historyDateSelect");
+  if (dateSelect) {
+    dateSelect.style.display = "none";
+  }
+
   selectedHistoryItemId = null;
 
   // Refresh date select
@@ -328,7 +360,7 @@ function clearAllHistory() {
 function toggleHistoryPanel() {
   const historyPanel = document.getElementById("history-panel");
   const dateSelect = document.getElementById("historyDateSelect");
-  const toggleBtn = document.getElementById("historyToggleBtn");
+  const toggleBtn = document.getElementById("historyToggleBtn"); // This might not exist in desktop app
   const downloadBtn = document.getElementById("downloadHistoryBtn");
 
   historyVisible = !historyVisible;
@@ -336,46 +368,71 @@ function toggleHistoryPanel() {
   if (historyVisible) {
     // Show history
     historyPanel.style.display = "block";
-    toggleBtn.textContent = "Hide History";
+
+    // Update toggle button text if it exists
+    if (toggleBtn) {
+      toggleBtn.textContent = "Hide History";
+    }
 
     // Load available dates
     const hasHistory = loadHistoryDates();
     if (hasHistory) {
-      dateSelect.style.display = "block";
-      downloadBtn.style.display = "block";
+      if (dateSelect) {
+        dateSelect.style.display = "block";
+      }
+      if (downloadBtn) {
+        downloadBtn.style.display = "block";
+      }
 
       // Select today's date by default if it exists
       const todayKey = getTodayHistoryKey();
-      const hasToday = Array.from(dateSelect.options).some(
-        (option) => option.value === todayKey
-      );
 
-      // Load the selected date or today if it exists, otherwise use first available date
-      let dateKey = dateSelect.value;
-      if (!dateKey || !localStorage.getItem(dateKey)) {
-        if (hasToday) {
-          dateKey = todayKey;
-          dateSelect.value = todayKey;
-        } else if (dateSelect.options.length > 1) {
-          dateKey = dateSelect.options[1].value; // First non-empty option
-          dateSelect.value = dateKey;
+      if (dateSelect) {
+        const hasToday = Array.from(dateSelect.options).some(
+          (option) => option.value === todayKey
+        );
+
+        // Load the selected date or today if it exists, otherwise use first available date
+        let dateKey = dateSelect.value;
+        if (!dateKey || !localStorage.getItem(dateKey)) {
+          if (hasToday) {
+            dateKey = todayKey;
+            dateSelect.value = todayKey;
+          } else if (dateSelect.options.length > 1) {
+            dateKey = dateSelect.options[1].value; // First non-empty option
+            dateSelect.value = dateKey;
+          }
         }
-      }
 
-      if (dateKey) {
-        loadHistoryForDate(dateKey);
+        if (dateKey) {
+          loadHistoryForDate(dateKey);
+        }
+      } else {
+        // If no date selector, just load today's history
+        loadHistoryForDate(todayKey);
       }
     } else {
-      dateSelect.style.display = "none";
-      downloadBtn.style.display = "none";
+      if (dateSelect) {
+        dateSelect.style.display = "none";
+      }
+      if (downloadBtn) {
+        downloadBtn.style.display = "none";
+      }
       document.getElementById("history-list").innerHTML =
         '<div class="history-item">No history available</div>';
     }
   } else {
     // Hide history
     historyPanel.style.display = "none";
-    toggleBtn.textContent = "Show History";
-    downloadBtn.style.display = "none";
+
+    // Update toggle button text if it exists
+    if (toggleBtn) {
+      toggleBtn.textContent = "Show History";
+    }
+
+    if (downloadBtn) {
+      downloadBtn.style.display = "none";
+    }
   }
 }
 
@@ -385,15 +442,22 @@ function toggleHistoryPanel() {
  */
 function onHistoryDateChange() {
   const dateSelect = document.getElementById("historyDateSelect");
-  const dateKey = dateSelect.value;
 
-  if (dateKey) {
-    loadHistoryForDate(dateKey);
-  } else {
-    document.getElementById("history-list").innerHTML = "";
+  if (dateSelect) {
+    const dateKey = dateSelect.value;
+
+    if (dateKey) {
+      loadHistoryForDate(dateKey);
+    } else {
+      document.getElementById("history-list").innerHTML = "";
+    }
   }
 
-  document.getElementById("history-detail").style.display = "none";
+  const detailPanel = document.getElementById("history-detail");
+  if (detailPanel) {
+    detailPanel.style.display = "none";
+  }
+
   selectedHistoryItemId = null;
 }
 
@@ -440,4 +504,51 @@ function downloadHistory(dateKey) {
   document.body.appendChild(linkElement);
   linkElement.click();
   document.body.removeChild(linkElement);
+}
+
+/**
+ * Function to load history - wrapper for toggleHistoryPanel
+ * This function is called from the "Load History" button in index.html
+ */
+function loadHistory() {
+  toggleHistoryPanel();
+}
+
+/**
+ * Function to clear history - wrapper for clearAllHistory
+ * This function is called from the "Clear History" button in index.html
+ */
+function clearHistory() {
+  clearAllHistory();
+}
+
+/**
+ * Closes the history detail panel
+ * This function is called from the "Close Detail" button in the history detail panel
+ */
+function closeHistoryDetail() {
+  const detailPanel = document.getElementById("history-detail");
+  if (detailPanel) {
+    detailPanel.style.display = "none";
+  }
+
+  // Reset the selected item highlight
+  document.querySelectorAll(".history-item").forEach((item) => {
+    item.classList.remove("selected");
+  });
+
+  selectedHistoryItemId = null;
+}
+
+/**
+ * Downloads the currently selected history date as a JSON file.
+ * Validates that a date is selected before proceeding.
+ */
+function downloadCurrentHistory() {
+  const dateSelect = document.getElementById("historyDateSelect");
+  if (dateSelect && dateSelect.value) {
+    downloadHistory(dateSelect.value);
+  } else {
+    alert("Please select a date first");
+  }
 }

@@ -48,6 +48,19 @@ async function toggleRecording() {
       '<div class="loader"></div><span>Processing your question...</span>';
     loading.style.display = "none";
 
+    // Clear audio files in the audio folder on the server
+    try {
+      const apiUrl = window.electronAPI.getApiBaseUrl();
+      fetch(`${apiUrl}/api/v1/recording/clear-audio-files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }).catch((err) => console.error("Error clearing audio files:", err));
+      console.log("Sent request to clear audio files");
+    } catch (error) {
+      console.error("Failed to send clear audio files request:", error);
+      // Continue with recording even if clearing files fails
+    }
+
     // Start recording using the audio-recorder.js
     const recordingStarted = await window.audioRecorder.startRecording();
 

@@ -270,6 +270,16 @@
       <div id="history-controls">
         <button onclick="loadHistory()">Load History</button>
         <button onclick="clearHistory()">Clear History</button>
+        <button
+          onclick="downloadCurrentHistory()"
+          id="downloadHistoryBtn"
+          style="display: none"
+        >
+          Download
+        </button>
+        <select id="historyDateSelect" style="display: none">
+          <option value="">Select a date...</option>
+        </select>
       </div>
       <div id="history-panel" style="display: none; margin-top: 20px">
         <div id="history-list">

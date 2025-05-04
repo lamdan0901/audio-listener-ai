@@ -118,5 +118,21 @@ module.exports = () => {
     res.json(recordingController.getStatus());
   });
 
+  // New endpoint to clear audio files
+  router.post("/clear-audio-files", (req, res) => {
+    try {
+      const fileController = require("../controllers/fileController");
+      fileController.cleanupExistingAudioFiles();
+      res
+        .status(200)
+        .json({ success: true, message: "Audio files cleared successfully" });
+    } catch (error) {
+      console.error("Error clearing audio files:", error);
+      res
+        .status(500)
+        .json({ success: false, error: "Failed to clear audio files" });
+    }
+  });
+
   return router;
 };
