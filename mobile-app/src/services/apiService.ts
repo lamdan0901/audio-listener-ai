@@ -9,9 +9,27 @@ if (!API_URL) {
   );
 }
 
+// For Android emulator, ensure we're using 10.0.2.2 instead of 192.168.x.x
+let effectiveApiUrl = API_URL;
+
+// Special handling for Android emulator
+if (
+  Platform.OS === "android" &&
+  effectiveApiUrl &&
+  effectiveApiUrl.includes("192.168.")
+) {
+  effectiveApiUrl = effectiveApiUrl.replace(
+    /192\.168\.[0-9]+\.[0-9]+/,
+    "10.0.2.2"
+  );
+  console.log(
+    `Android emulator detected, using modified API URL: ${effectiveApiUrl}`
+  );
+}
+
 // Construct base URL for API endpoints (assuming /api/v1 path)
-const API_BASE_URL = API_URL
-  ? `${API_URL}/api/v1`
+const API_BASE_URL = effectiveApiUrl
+  ? `${effectiveApiUrl}/api/v1`
   : "http://localhost:3033/api/v1"; // Use loaded URL or fallback
 
 interface RecordingParams {
@@ -32,30 +50,28 @@ interface GeminiParams extends RecordingParams {
 }
 
 /**
- * Calls the backend endpoint to signal the start of recording.
- * (May not be strictly necessary if backend starts recording on file receipt,
- * but included for parity with web app logic).
+ * Clears audio files on the server.
+ * This is useful to call before starting a new recording.
  */
-export const startRecordingApi = async (
-  params: RecordingParams
-): Promise<boolean> => {
-  const url = `${API_BASE_URL}/recording/start`;
-  console.log(`Calling API: POST ${url}`, params);
+export const clearAudioFilesApi = async (): Promise<boolean> => {
+  const url = `${API_BASE_URL}/recording/clear-audio-files`;
+  console.log(`Calling API: POST ${url}`);
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
     });
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
-    console.log("Start recording API call successful.");
+    console.log("Clear audio files API call successful.");
     return true;
   } catch (error) {
-    console.error("Error calling start recording API:", error);
-    const message = error instanceof Error ? error.message : String(error);
-    Alert.alert("API Error", `Failed to signal start recording: ${message}`);
+    console.error("Error calling clear audio files API:", error);
+    // Don't show alert for this non-critical operation
     return false;
   }
 };
@@ -111,10 +127,82 @@ export const stopRecordingAndUpload = async (
       }
     } else {
       // Native platform implementation using expo-file-system
+      console.log(`Uploading file from URI: ${audioUri}`);
+
+      // Get file info to determine the correct filename with extension
+      const fileInfo = await FileSystem.getInfoAsync(audioUri);
+      console.log("File info:", fileInfo);
+
+      // Check if file exists and has content
+      if (!fileInfo.exists) {
+        throw new Error("Audio file does not exist at URI: " + audioUri);
+      }
+
+      if (fileInfo.size === 0) {
+        throw new Error("Audio file is empty (0 bytes)");
+      }
+
+      if (fileInfo.size < 1000) {
+        console.warn(
+          "Warning: Audio file is very small:",
+          fileInfo.size,
+          "bytes"
+        );
+      }
+
+      // Extract file extension from URI or use default based on platform
+      let fileExtension = Platform.OS === "android" ? ".mp4" : ".m4a"; // Default extensions by platform
+
+      // Try to get the extension from the URI
+      if (audioUri.includes(".")) {
+        const extractedExt = audioUri.substring(audioUri.lastIndexOf("."));
+        // Only use the extracted extension if it's one we expect
+        if ([".mp4", ".m4a", ".wav", ".aac"].includes(extractedExt)) {
+          fileExtension = extractedExt;
+        } else {
+          console.log(
+            `Ignoring unexpected extension ${extractedExt}, using platform default ${fileExtension}`
+          );
+        }
+      }
+
+      // Create a filename with the correct extension
+      const filename = `recording${fileExtension}`;
+      console.log(`Platform: ${Platform.OS}, using filename: ${filename}`);
+
+      // Determine the correct MIME type based on file extension
+      let mimeType = "audio/mpeg"; // Default MIME type (MP3)
+      if (fileExtension === ".mp4") {
+        mimeType = "video/mp4";
+      } else if (fileExtension === ".m4a") {
+        mimeType = "audio/m4a";
+      } else if (fileExtension === ".wav") {
+        mimeType = "audio/wav";
+      } else if (fileExtension === ".aac") {
+        mimeType = "audio/aac";
+      } else if (fileExtension === ".mp3") {
+        mimeType = "audio/mpeg";
+      }
+
+      console.log(
+        `Using MIME type: ${mimeType} for file with extension ${fileExtension}`
+      );
+
+      // For Android, explicitly set the correct MIME type based on platform
+      if (Platform.OS === "android") {
+        mimeType = "video/mp4"; // Android recordings are actually MP4 files
+      } else if (Platform.OS === "ios") {
+        mimeType = "audio/m4a"; // iOS recordings are M4A files
+      }
+
+      console.log(`Final MIME type for upload: ${mimeType}`);
+
       const uploadResult = await FileSystem.uploadAsync(url, audioUri, {
         httpMethod: "POST",
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         fieldName: "audio", // Matches the field name expected by multer on the backend
+        mimeType: mimeType, // Use the determined MIME type
+        fileName: filename, // Specify the filename with extension
         parameters: {
           // Send other parameters as form fields
           language: params.language,
@@ -201,7 +289,10 @@ export const retryTranscriptionApi = async (
       // Assuming retry just needs the file path reference and params, not re-upload
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify(params),
       });
 
@@ -264,13 +355,16 @@ export const processWithGeminiApi = async (
       return true;
     } else {
       // Native platform implementation using the standard Gemini endpoint
-      const url = `${API_BASE_URL}/ai/gemini`;
+      const url = `${API_BASE_URL}/recording/gemini`;
       console.log(`Calling API: POST ${url}`, params);
 
       // Assuming Gemini endpoint also just needs the file path reference
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify(params),
       });
 
@@ -299,7 +393,10 @@ export const cancelRequestApi = async (): Promise<boolean> => {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       // No body needed for cancel usually
     });
     if (!response.ok) {
@@ -324,17 +421,26 @@ export const cancelRequestApi = async (): Promise<boolean> => {
  */
 export const getStatusApi = async (): Promise<{
   hasLastQuestion: boolean;
+  isRecording: boolean;
+  lastQuestionPreview?: string;
 } | null> => {
+  // Use the dedicated status endpoint that we've added to the backend
   const url = `${API_BASE_URL}/status`;
   console.log(`Calling API: GET ${url}`);
   try {
-    const response = await fetch(url, { method: "GET" });
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
     const data = await response.json();
     console.log("Get status API call successful:", data);
-    return data; // Expects { hasLastQuestion: boolean, ... }
+    return data; // Expects { hasLastQuestion: boolean, isRecording: boolean, ... }
   } catch (error) {
     console.error("Error calling get status API:", error);
     // Don't alert for status check failure, just log

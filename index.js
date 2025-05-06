@@ -20,13 +20,23 @@ const io = socketIo(server, {
   cors: {
     origin: "*", // Allow all origins for Socket.IO connections
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "User-Agent"],
     credentials: true,
+  },
+  // Socket.IO server configuration for better mobile compatibility
+  pingTimeout: 10000, // Shorter ping timeout (10 seconds)
+  pingInterval: 5000, // More frequent pings (5 seconds)
+  connectTimeout: 10000, // Shorter connection timeout (10 seconds)
+  maxHttpBufferSize: 5e6, // 5MB max buffer size for messages
+  transports: ["polling", "websocket"], // Support both polling and websocket, but prefer polling for mobile
+  allowUpgrades: true, // Allow transport upgrades
+  perMessageDeflate: {
+    threshold: 1024, // Only compress messages larger than 1KB
   },
 });
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static("public"));
+// Set up middleware for parsing request bodies
 app.use(express.json({ limit: "10mb" })); // Increase JSON payload limit for larger audio files
 app.use(express.urlencoded({ extended: true, limit: "10mb" })); // Support form data with larger limit
 
@@ -41,21 +51,84 @@ app.use(
 );
 
 const recordingRoutes = require("./routes/recordingRoutes")();
+const statusRoutes = require("./routes/statusRoutes")();
 
 // Set up API routes with proper versioning
 app.use("/api/v1/recording", recordingRoutes);
+app.use("/api/v1/status", statusRoutes);
 
 // Root route for health check
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    message: "Audio processing API is running",
-    version: "1.0.0",
+app.get("/", (req, res, next) => {
+  // Check if the request accepts JSON
+  const acceptsJson = req.accepts("json");
+
+  if (acceptsJson) {
+    // Return JSON for API clients
+    res.json({
+      status: "ok",
+      message: "Audio processing API is running",
+      version: "1.0.0",
+      endpoints: {
+        status: "/api/v1/status",
+        recording: "/api/v1/recording",
+      },
+    });
+  } else {
+    // For browser requests, continue to the next middleware (static file serving)
+    next();
+  }
+});
+
+// Add a catch-all route for API requests
+app.use("/api", (req, res) => {
+  return res.status(404).json({
+    status: "error",
+    message: "API endpoint not found",
+    path: req.path,
   });
 });
 
+// Serve static files AFTER API routes
+app.use(express.static("public"));
+
+// Catch-all route for non-API requests that don't match static files
+app.use((req, res) => {
+  // For any other routes, serve the index.html file
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
+  const clientInfo = {
+    id: socket.id,
+    transport: socket.conn.transport.name,
+    address: socket.handshake.address,
+    userAgent: socket.handshake.headers["user-agent"] || "Unknown",
+    query: socket.handshake.query || {},
+  };
+
+  console.log("Client connected:", clientInfo);
+
+  // Send immediate acknowledgment to the client
+  socket.emit("connected", {
+    id: socket.id,
+    serverTime: new Date().toISOString(),
+    message: "Connection established successfully",
+  });
+
+  // Handle client disconnect
+  socket.on("disconnect", (reason) => {
+    console.log(`Client disconnected (${socket.id}): ${reason}`);
+  });
+
+  // Handle errors
+  socket.on("error", (error) => {
+    console.error(`Socket error for client ${socket.id}:`, error);
+  });
+
+  // Handle ping timeout
+  socket.conn.on("ping timeout", () => {
+    console.warn(`Ping timeout for client ${socket.id}`);
+  });
 });
 
 // Bridge backend events to Socket.IO

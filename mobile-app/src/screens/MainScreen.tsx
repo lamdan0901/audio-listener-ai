@@ -24,13 +24,20 @@ import {
   AudioSourceType,
 } from "../hooks/useAudioRecorder";
 import {
-  startRecordingApi,
+  clearAudioFilesApi,
   stopRecordingAndUpload,
   retryTranscriptionApi,
   processWithGeminiApi,
   cancelRequestApi,
   getStatusApi,
 } from "../services/apiService";
+import {
+  checkAndFixSocketConnection,
+  reconnectSocket,
+} from "../services/socketService";
+import { checkConnection } from "../utils/connectionHelper";
+import { checkApiEndpoint } from "../utils/apiEndpointChecker";
+import { API_URL } from "@env";
 import AudioDeviceSelector from "../components/AudioDeviceSelector";
 import { HistoryEntry } from "../types/history"; // Import history type
 import {
@@ -85,6 +92,13 @@ const MainScreen: React.FC = () => {
   const [canUseGemini, setCanUseGemini] = useState<boolean>(false);
   const [canCancel, setCanCancel] = useState<boolean>(false);
 
+  // Connection status
+  const [connectionStatus, setConnectionStatus] = useState<{
+    success: boolean;
+    message: string;
+    details?: any;
+  } | null>(null);
+
   const [questionText, setQuestionText] = useState<string>("");
   const [answerText, setAnswerText] = useState<string>("");
   const [lastAudioFile, setLastAudioFile] = useState<string | null>(null);
@@ -136,13 +150,103 @@ const MainScreen: React.FC = () => {
         console.error("Failed to load preferences:", e);
       }
 
-      // Fetch initial server status
-      const initialStatus = await getStatusApi();
-      if (initialStatus) {
-        setCanFollowUp(initialStatus.hasLastQuestion);
-        console.log("Initial server status:", initialStatus);
+      // Check connection to backend server
+      const connection = await checkConnection();
+      setConnectionStatus(connection);
+      console.log("Connection check result:", connection);
+
+      if (connection.success) {
+        // Check if we got an HTML response from the root endpoint
+        if (connection.isHtmlResponse) {
+          console.log(
+            "Server is running but returned HTML. Checking API endpoint..."
+          );
+
+          // If root connection is successful, check the API endpoint
+          const apiEndpointCheck = await checkApiEndpoint();
+          console.log("API endpoint check result:", apiEndpointCheck);
+
+          if (apiEndpointCheck.success) {
+            // Fetch initial server status only if both checks are successful
+            const initialStatus = await getStatusApi();
+            if (initialStatus) {
+              setCanFollowUp(initialStatus.hasLastQuestion);
+              console.log("Initial server status:", initialStatus);
+            } else {
+              console.log("Could not fetch initial server status.");
+            }
+          } else {
+            // Root connection works but API endpoint doesn't
+            setConnectionStatus({
+              success: false,
+              message: `API endpoint check failed: ${apiEndpointCheck.message}`,
+              details: apiEndpointCheck.details,
+              rawResponse: apiEndpointCheck.rawResponse,
+              url: connection.url,
+            });
+
+            Alert.alert(
+              "API Endpoint Error",
+              `Connected to server but API endpoint is not responding correctly.\n\n` +
+                `This usually means the server is running but the API routes are not set up correctly.\n\n` +
+                `Error: ${apiEndpointCheck.message}`,
+              [
+                {
+                  text: "View Details",
+                  onPress: () => {
+                    Alert.alert(
+                      "API Endpoint Details",
+                      JSON.stringify(apiEndpointCheck, null, 2),
+                      [{ text: "OK" }]
+                    );
+                  },
+                },
+                {
+                  text: "Retry",
+                  onPress: loadInitialData,
+                },
+                {
+                  text: "OK",
+                },
+              ]
+            );
+          }
+        } else {
+          // Normal JSON response from API endpoint
+          // Fetch initial server status
+          const initialStatus = await getStatusApi();
+          if (initialStatus) {
+            setCanFollowUp(initialStatus.hasLastQuestion);
+            console.log("Initial server status:", initialStatus);
+          } else {
+            console.log("Could not fetch initial server status.");
+          }
+        }
       } else {
-        console.log("Could not fetch initial server status.");
+        // Show alert if connection failed
+        Alert.alert(
+          "Connection Error",
+          `Could not connect to the backend server: ${connection.message}. Please check your network connection and server status.`,
+          [
+            {
+              text: "View Details",
+              onPress: () => {
+                Alert.alert(
+                  "Connection Details",
+                  JSON.stringify(connection, null, 2),
+                  [{ text: "OK" }]
+                );
+              },
+            },
+            {
+              text: "Retry",
+              onPress: loadInitialData,
+            },
+            {
+              text: "OK",
+            },
+          ]
+        );
       }
 
       // Load history
@@ -307,7 +411,128 @@ const MainScreen: React.FC = () => {
   ]);
 
   // --- Action Handlers ---
+  // Function to handle socket reconnection
+  const handleReconnectSocket = async () => {
+    setStatus("connecting");
+    setLoadingMessage("Reconnecting to server...");
+
+    try {
+      // First check if the server is reachable
+      const isServerReachable = await checkServerReachability();
+
+      if (!isServerReachable) {
+        console.error("Server is not reachable");
+        Alert.alert(
+          "Server Unreachable",
+          `Could not reach the server at ${API_URL}. Please check your network connection and server status.`,
+          [
+            {
+              text: "Check Network Settings",
+              onPress: () => {
+                // On Android, this will open network settings
+                if (Platform.OS === "android") {
+                  try {
+                    // This requires the appropriate permissions in AndroidManifest.xml
+                    // Linking.sendIntent('android.settings.WIRELESS_SETTINGS');
+                    Alert.alert("Please check your network settings manually");
+                  } catch (err) {
+                    Alert.alert("Please check your network settings manually");
+                  }
+                } else {
+                  // On iOS, just show a message
+                  Alert.alert("Please check your network settings manually");
+                }
+              },
+            },
+            { text: "Try Again", onPress: handleReconnectSocket },
+            { text: "Cancel" },
+          ]
+        );
+        setStatus("idle");
+        return false;
+      }
+
+      // Check connection to backend server
+      const connection = await checkConnection();
+      console.log("Connection check result:", connection);
+
+      if (connection.success) {
+        // Try to reconnect the socket
+        const reconnected = await checkAndFixSocketConnection();
+
+        if (reconnected) {
+          console.log("Socket reconnected successfully");
+          Alert.alert(
+            "Connection Restored",
+            "Successfully reconnected to the server."
+          );
+
+          // Fetch initial server status
+          const initialStatus = await getStatusApi();
+          if (initialStatus) {
+            setCanFollowUp(initialStatus.hasLastQuestion);
+            console.log("Initial server status:", initialStatus);
+          }
+
+          return true;
+        } else {
+          console.error("Failed to reconnect socket");
+          Alert.alert(
+            "Connection Error",
+            "Failed to establish socket connection to the server. This might be due to network issues or server configuration.",
+            [
+              { text: "Try Again", onPress: handleReconnectSocket },
+              { text: "Cancel" },
+            ]
+          );
+          return false;
+        }
+      } else {
+        console.error("Server connection failed:", connection.message);
+        Alert.alert(
+          "Connection Error",
+          `Could not connect to the server: ${connection.message}`,
+          [
+            { text: "Try Again", onPress: handleReconnectSocket },
+            { text: "Cancel" },
+          ]
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error("Error reconnecting:", error);
+      Alert.alert(
+        "Connection Error",
+        "An error occurred while trying to reconnect.",
+        [
+          { text: "Try Again", onPress: handleReconnectSocket },
+          { text: "Cancel" },
+        ]
+      );
+      return false;
+    } finally {
+      setStatus("idle");
+    }
+  };
+
+  // Function to handle recording toggle
   const handleToggleRecording = async () => {
+    // Check socket connection before recording
+    if (!isConnected) {
+      const reconnected = await handleReconnectSocket();
+      if (!reconnected) {
+        Alert.alert(
+          "Connection Required",
+          "Please reconnect to the server before recording.",
+          [
+            { text: "Cancel" },
+            { text: "Reconnect", onPress: handleReconnectSocket },
+          ]
+        );
+        return;
+      }
+    }
+
     if (isRecording) {
       // Stop recording
       setIsLoading(true);
@@ -376,22 +601,21 @@ const MainScreen: React.FC = () => {
         setCanRetry(false);
         setCanUseGemini(false);
 
-        // Signal the backend that we're starting a new recording
-        const startParams = {
-          language,
-          questionContext,
-          customContext,
-          isFollowUp,
-          audioSource, // Include the audio source
-          audioDeviceId: selectedDeviceId, // Include the selected device ID
-        };
+        // Clear audio files on the server (optional)
+        await clearAudioFilesApi().catch((err) => {
+          console.error("Failed to clear audio files:", err);
+          // Continue with recording even if clearing files fails
+        });
 
-        await startRecordingApi(startParams);
+        // Start the actual recording - skip the legacy startRecordingApi call
+        const recordingStarted = await startRecording();
 
-        // Start the actual recording
-        await startRecording();
-
-        console.log("Recording started successfully");
+        // Only log success if recording actually started
+        if (recordingStarted !== false) {
+          console.log("Recording started successfully");
+        } else {
+          throw new Error("Start encountered an error: recording not started");
+        }
       } catch (error) {
         console.error("Error starting recording:", error);
         Alert.alert(
@@ -551,6 +775,72 @@ const MainScreen: React.FC = () => {
       >
         <Text style={styles.title}>Audio Listener AI (Mobile)</Text>
 
+        {/* Connection Status Indicator */}
+        {connectionStatus && (
+          <View
+            style={[
+              styles.connectionStatus,
+              {
+                backgroundColor: connectionStatus.success
+                  ? "#4CAF50"
+                  : "#F44336",
+              },
+            ]}
+          >
+            <View style={styles.connectionStatusTextContainer}>
+              <Text style={styles.connectionStatusText}>
+                {connectionStatus.success
+                  ? connectionStatus.isHtmlResponse
+                    ? `Server running (${connectionStatus.url || API_URL})`
+                    : `Connected to API (${connectionStatus.url || API_URL})`
+                  : "Connection error"}
+              </Text>
+              {connectionStatus.success && connectionStatus.isHtmlResponse && (
+                <Text style={styles.connectionStatusSubtext}>
+                  HTML response detected - API may not be available
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={async () => {
+                setConnectionStatus(null);
+                const connection = await checkConnection();
+                setConnectionStatus(connection);
+                if (!connection.success) {
+                  // Show more detailed error information
+                  Alert.alert(
+                    "Connection Error",
+                    `Could not connect to the backend server: ${connection.message}\n\n` +
+                      `URL: ${connection.url || API_URL}\n\n` +
+                      (connection.rawResponse
+                        ? `Server response: ${connection.rawResponse.substring(
+                            0,
+                            150
+                          )}...`
+                        : "No response from server"),
+                    [
+                      {
+                        text: "View Details",
+                        onPress: () => {
+                          Alert.alert(
+                            "Connection Details",
+                            JSON.stringify(connection, null, 2),
+                            [{ text: "OK" }]
+                          );
+                        },
+                      },
+                      { text: "OK" },
+                    ]
+                  );
+                }
+              }}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Audio Device Selection */}
         <View style={styles.section}>
           <AudioDeviceSelector
@@ -631,16 +921,29 @@ const MainScreen: React.FC = () => {
 
         {/* Status Display */}
         <View style={styles.statusContainer}>
-          {renderStatus()}
-          {isLoading && (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <ActivityIndicator
-                size="small"
-                color="#007bff"
-                style={styles.loader}
-              />
-              <Text style={styles.loadingText}>{loadingMessage}</Text>
-            </View>
+          <View style={{ flex: 1 }}>
+            {renderStatus()}
+            {isLoading && (
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <ActivityIndicator
+                  size="small"
+                  color="#007bff"
+                  style={styles.loader}
+                />
+                <Text style={styles.loadingText}>{loadingMessage}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Socket Reconnect Button */}
+          {!isConnected && (
+            <TouchableOpacity
+              style={styles.reconnectButton}
+              onPress={handleReconnectSocket}
+              disabled={status === "connecting"}
+            >
+              <Text style={styles.reconnectButtonText}>Reconnect</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -851,6 +1154,49 @@ const styles = StyleSheet.create({
     marginTop: 15,
     color: "#6c757d",
     fontStyle: "italic",
+  },
+  // Connection status styles
+  connectionStatus: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 8,
+    borderRadius: 4,
+    marginBottom: 12,
+  },
+  connectionStatusTextContainer: {
+    flex: 1,
+  },
+  connectionStatusText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  connectionStatusSubtext: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  retryButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: "white",
+    fontWeight: "bold",
+  },
+  reconnectButton: {
+    backgroundColor: "#007bff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginLeft: 10,
+  },
+  reconnectButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 12,
   },
   // ... (Keep existing styles: resultText, disabledText, markdownStyles, etc.)
   container: { flex: 1, backgroundColor: "#f8f9fa" },

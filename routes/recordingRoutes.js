@@ -29,11 +29,62 @@ const storage = multer.diskStorage({
 
 // File filter to accept only audio files
 const fileFilter = (req, file, cb) => {
+  console.log(
+    "Received file:",
+    file.originalname,
+    "with mimetype:",
+    file.mimetype
+  );
+
+  // Log the request headers for debugging
+  console.log("Request headers:", req.headers);
+
+  // Always accept files from mobile app (we'll validate them later)
+  if (req.headers["user-agent"] && req.headers["user-agent"].includes("Expo")) {
+    console.log("Accepting file from Expo mobile app");
+    cb(null, true);
+    return;
+  }
+
   // Accept common audio formats
   if (file.mimetype.startsWith("audio/")) {
+    console.log("Accepting audio file with mimetype:", file.mimetype);
     cb(null, true);
+  }
+  // Accept video/mp4 which is sometimes used for audio-only recordings on mobile
+  else if (
+    file.mimetype === "video/mp4" ||
+    file.mimetype === "video/quicktime"
+  ) {
+    console.log(
+      "Accepting video/mp4 or video/quicktime as audio file (common for mobile recordings)"
+    );
+    cb(null, true);
+  }
+  // Check file extension for common audio formats if mimetype is application/octet-stream
+  else if (file.mimetype === "application/octet-stream") {
+    const ext = file.originalname.toLowerCase().split(".").pop();
+    if (["mp3", "wav", "ogg", "m4a", "aac", "mp4"].includes(ext)) {
+      console.log(
+        `Accepting file with extension .${ext} despite mimetype ${file.mimetype}`
+      );
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          `File with extension .${ext} is not an accepted audio format`
+        ),
+        false
+      );
+    }
   } else {
-    cb(new Error("Only audio files are allowed"), false);
+    console.log("Rejected file with mimetype:", file.mimetype);
+    cb(
+      new Error(
+        `Only audio files are allowed. Received mimetype: ${file.mimetype}`
+      ),
+      false
+    );
   }
 };
 

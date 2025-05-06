@@ -37,37 +37,46 @@ export const useAudioRecorder = (): AudioRecorderState => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSourceType>("microphone");
 
-  // Define optimized recording options for speech recognition
-  // These match the desktop app settings as closely as possible
+  // Define recording options for speech recognition
+  // Using simpler options that are more likely to work across devices
   const recordingOptions = useRef({
-    ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+    // Start with the LOW_QUALITY preset which is more compatible across devices
+    ...Audio.RecordingOptionsPresets.LOW_QUALITY,
+
+    // Customize for Android
     android: {
-      ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-      extension: ".webm",
-      outputFormat: Audio.AndroidOutputFormat.WEBM,
-      audioEncoder: Audio.AndroidAudioEncoder.OPUS,
-      sampleRate: 16000, // 16kHz sample rate for speech recognition
+      ...Audio.RecordingOptionsPresets.LOW_QUALITY.android,
+      // Use MP4 format with the correct extension
+      extension: ".mp4", // Match the actual file format
+      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+      audioEncoder: Audio.AndroidAudioEncoder.AAC,
+      // Basic audio settings
+      sampleRate: 16000, // 16kHz is standard for speech recognition
       numberOfChannels: 1, // Mono audio
-      bitRate: 128000, // 128kbps
+      bitRate: 64000, // Lower bitrate for better compatibility
     },
+
+    // Customize for iOS
     ios: {
-      ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
-      extension: ".m4a",
-      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-      audioQuality: Audio.IOSAudioQuality.MEDIUM, // Balance between quality and file size
-      sampleRate: 16000, // 16kHz sample rate for speech recognition
+      ...Audio.RecordingOptionsPresets.LOW_QUALITY.ios,
+      extension: ".m4a", // Use M4A which matches the container format
+      outputFormat: Audio.IOSOutputFormat.MPEG4AAC, // AAC in M4A container
+      audioQuality: Audio.IOSAudioQuality.LOW, // Lower quality for better compatibility
+      sampleRate: 16000, // 16kHz is standard for speech recognition
       numberOfChannels: 1, // Mono audio
-      bitRate: 128000, // 128kbps
-      linearPCMBitDepth: 16, // 16-bit
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
+      bitRate: 64000, // Lower bitrate for better compatibility
     },
+
+    // Web options
     web: {
-      ...Audio.RecordingOptionsPresets.HIGH_QUALITY.web,
-      mimeType: "audio/webm",
-      bitsPerSecond: 128000,
+      ...Audio.RecordingOptionsPresets.LOW_QUALITY.web,
+      mimeType: "audio/webm", // Standard web audio format
+      bitsPerSecond: 64000, // Lower bitrate for better compatibility
     },
   }).current;
+
+  // Log the recording options for debugging
+  console.log("Recording options:", JSON.stringify(recordingOptions));
 
   // Request permissions on mount
   useEffect(() => {
@@ -85,20 +94,24 @@ export const useAudioRecorder = (): AudioRecorderState => {
         console.log("Microphone permission granted.");
         // Configure audio mode for iOS/Android - IMPORTANT for recording
         try {
+          // Use the most basic audio mode settings that are likely to work
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: true,
-            playsInSilentModeIOS: true, // Optional: Allow playback even in silent mode
-            // interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX, // Optional
-            // interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX, // Optional
-            // shouldDuckAndroid: true, // Optional
-            // playThroughEarpieceAndroid: false, // Optional
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            // Don't set any other options to use defaults
           });
-          console.log("Audio mode set successfully.");
+          console.log("Audio mode set successfully with basic settings.");
+
+          // Log that audio mode was set
+          console.log(
+            "Audio mode set successfully, continuing without verification"
+          );
         } catch (error) {
           console.error("Failed to set audio mode", error);
           Alert.alert(
             "Audio Setup Error",
-            "Could not configure audio settings."
+            "Could not configure audio settings. Some features may not work correctly."
           );
         }
       }
@@ -106,25 +119,31 @@ export const useAudioRecorder = (): AudioRecorderState => {
     requestPermissions();
   }, []);
 
-  const startRecording = async () => {
+  const startRecording = async (): Promise<boolean> => {
     if (permissionResponse?.status !== "granted") {
       Alert.alert(
         "Permissions Required",
         "Cannot start recording without microphone permission."
       );
       console.log("Attempted to record without permission.");
-      return;
+      return false;
     }
 
     if (isRecording || recordingInstance) {
       console.warn("Recording already in progress or instance exists.");
       // Optionally stop existing before starting new one
       // await stopRecording();
-      return;
+      return false;
     }
 
     console.log("Starting recording...");
     try {
+      // Skip logging current audio mode as getAudioModeAsync is not available
+      console.log("Starting recording with current audio mode...");
+
+      // Log the recording options we're using
+      console.log("Recording options:", JSON.stringify(recordingOptions));
+
       // Handle different audio sources
       if (audioSource === "microphone") {
         // Standard microphone recording
@@ -139,6 +158,39 @@ export const useAudioRecorder = (): AudioRecorderState => {
           );
         }
 
+        // Try to set audio mode again right before recording
+        try {
+          // Use the most basic audio mode settings that are likely to work
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            // Don't set any other options to use defaults
+          });
+          console.log("Audio mode set successfully right before recording");
+
+          // Unload any existing recording instance to be safe
+          if (recordingInstance) {
+            console.log(
+              "Unloading existing recording instance before starting new one"
+            );
+            try {
+              await recordingInstance.stopAndUnloadAsync();
+              setRecordingInstance(null);
+            } catch (unloadError) {
+              console.error("Error unloading existing recording:", unloadError);
+              // Continue anyway
+            }
+          }
+        } catch (audioModeError) {
+          console.error(
+            "Failed to set audio mode before recording:",
+            audioModeError
+          );
+          // Continue anyway
+        }
+
+        console.log("Attempting to create recording...");
         // Create the recording with our optimized options
         const { recording } = await Audio.Recording.createAsync(
           recordingOptions
@@ -146,6 +198,7 @@ export const useAudioRecorder = (): AudioRecorderState => {
         setRecordingInstance(recording);
         setIsRecording(true);
         console.log("Microphone recording started successfully.");
+        return true;
       } else if (audioSource === "system") {
         // System audio recording (if supported)
         if (!isSystemAudioSupported()) {
@@ -161,6 +214,7 @@ export const useAudioRecorder = (): AudioRecorderState => {
           setRecordingInstance(recording);
           setIsRecording(true);
           console.log("Fallback to microphone recording started successfully.");
+          return true;
         } else {
           // On supported Android devices, we would implement system audio capture here
           // This would typically require a native module or extension
@@ -176,14 +230,41 @@ export const useAudioRecorder = (): AudioRecorderState => {
           console.log(
             "Recording started with microphone (system audio fallback)."
           );
+          return true;
         }
       }
     } catch (err) {
-      console.error("Failed to start recording", err);
-      Alert.alert("Recording Error", "Could not start audio recording.");
+      console.error("Failed to start recording:", err);
+
+      // Get more detailed error information
+      const errorMessage =
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+
+      console.error("Detailed error:", errorMessage);
+
+      // Check for specific error types
+      if (errorMessage.includes("permission")) {
+        Alert.alert(
+          "Permission Error",
+          "Microphone permission is required but not granted. Please check your device settings."
+        );
+      } else if (errorMessage.includes("audio mode")) {
+        Alert.alert(
+          "Audio Configuration Error",
+          "Failed to configure audio settings. Please restart the app and try again."
+        );
+      } else {
+        // Generic error
+        Alert.alert(
+          "Recording Error",
+          `Could not start audio recording: ${errorMessage}`
+        );
+      }
+
       // If createAsync fails, there's no new instance to clean up here.
       // The main recordingInstance state is used elsewhere for cleanup if needed.
       setIsRecording(false); // Ensure recording state is reset
+      return false;
     }
   };
 
@@ -199,6 +280,51 @@ export const useAudioRecorder = (): AudioRecorderState => {
       await recordingInstance.stopAndUnloadAsync();
       const uri = recordingInstance.getURI();
       console.log("Recording stopped and stored at", uri);
+
+      // Check if the URI is valid
+      if (!uri) {
+        console.error("Recording URI is null or undefined");
+        Alert.alert("Recording Error", "Failed to get recording file URI.");
+        setRecordingInstance(null);
+        return null;
+      }
+
+      // Get file info to verify the recording
+      try {
+        const fileSystem = require("expo-file-system");
+        const fileInfo = await fileSystem.getInfoAsync(uri);
+        console.log("Recording file info:", fileInfo);
+
+        // Check if file exists and has content
+        if (!fileInfo.exists) {
+          console.error("Recording file does not exist");
+          Alert.alert("Recording Error", "Recording file not found.");
+          setRecordingInstance(null);
+          return null;
+        }
+
+        if (fileInfo.size === 0) {
+          console.error("Recording file is empty (0 bytes)");
+          Alert.alert(
+            "Recording Error",
+            "Recording file is empty. No audio was captured."
+          );
+          setRecordingInstance(null);
+          return null;
+        }
+
+        if (fileInfo.size < 1000) {
+          console.warn(
+            "Warning: Recording file is very small:",
+            fileInfo.size,
+            "bytes"
+          );
+        }
+      } catch (fileInfoError) {
+        console.error("Error checking recording file:", fileInfoError);
+        // Continue anyway, as this is just diagnostic
+      }
+
       setRecordingInstance(null); // Clear the instance after stopping
       return uri;
     } catch (error) {

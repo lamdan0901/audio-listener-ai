@@ -102,15 +102,87 @@ async function validateAudioFile(filePath) {
     throw new Error("Audio file not found");
   }
 
-  // Check file size - if it's empty, wait a bit and check again (could be delayed write)
+  // Get file stats
   const stats = fs.statSync(filePath);
-  console.log(`Initial file size check: ${stats.size} bytes`);
+  console.log(`File size: ${stats.size} bytes`);
+  console.log(`File created: ${stats.birthtime}`);
+  console.log(`File modified: ${stats.mtime}`);
 
-  if (stats.size === 0) {
+  // Check file extension
+  const ext = path.extname(filePath).toLowerCase();
+  console.log(`File extension: ${ext}`);
+
+  // Try to determine file type
+  try {
+    const buffer = Buffer.alloc(4);
+    const fd = fs.openSync(filePath, "r");
+    fs.readSync(fd, buffer, 0, 4, 0);
+    fs.closeSync(fd);
+
+    const hexSignature = buffer.toString("hex").substring(0, 8);
+    console.log(`File signature (hex): ${hexSignature}`);
+
+    // Check common audio file signatures
+    if (hexSignature.startsWith("52494646")) {
+      // RIFF (WAV)
+      console.log("File appears to be a WAV file");
+    } else if (hexSignature.startsWith("494433")) {
+      // ID3 (MP3)
+      console.log("File appears to be an MP3 file");
+    } else if (hexSignature.startsWith("66747970")) {
+      // ftyp (MP4/M4A)
+      console.log("File appears to be an MP4/M4A file");
+    } else if (hexSignature.startsWith("4f676753")) {
+      // OggS (OGG)
+      console.log("File appears to be an OGG file");
+    } else {
+      console.log("File signature not recognized as a common audio format");
+    }
+  } catch (err) {
+    console.error("Error reading file signature:", err);
+  }
+
+  // Check file size - if it's empty, wait a bit and check again (could be delayed write)
+  const fileStats = fs.statSync(filePath);
+  console.log(`Initial file size check: ${fileStats.size} bytes`);
+
+  if (fileStats.size === 0) {
     await waitForFileContent(filePath);
   }
 
-  // Check if the file needs conversion to a standard format
+  // For MP4 files from mobile, we'll try to use them directly first
+  // We already have the extension from earlier in the function
+  if (ext === ".mp4" || ext === ".m4a" || ext === ".mp3") {
+    // Check if the file with .mp3 extension is actually an MP4 file
+    if (ext === ".mp3") {
+      try {
+        const buffer = Buffer.alloc(8);
+        const fd = fs.openSync(filePath, "r");
+        fs.readSync(fd, buffer, 0, 8, 0);
+        fs.closeSync(fd);
+
+        const hexSignature = buffer.toString("hex");
+        if (hexSignature.includes("66747970")) {
+          // "ftyp" signature for MP4
+          console.log(
+            "File with .mp3 extension is actually an MP4 file. Renaming..."
+          );
+          const newPath = filePath.replace(".mp3", ".mp4");
+          fs.renameSync(filePath, newPath);
+          console.log(`Renamed file to: ${newPath}`);
+          return newPath;
+        }
+      } catch (err) {
+        console.error("Error checking MP3 file format:", err);
+      }
+    }
+
+    console.log(`Using mobile audio file directly: ${filePath}`);
+    // We'll try to use the file as-is first, since AssemblyAI can handle MP4/M4A
+    return filePath;
+  }
+
+  // For other formats, check if conversion is needed
   if (needsConversion(filePath)) {
     try {
       console.log(`File format needs conversion: ${filePath}`);

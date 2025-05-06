@@ -118,11 +118,19 @@ async function transcribeAudio(
         `Retry attempt: ${isRetryAttempt}, Attempt #: ${attemptNumber}`
       );
 
+      // Read the file as a buffer
+      const audioBuffer = fs.readFileSync(filePath);
+      console.log(
+        `Read audio file into buffer, size: ${audioBuffer.length} bytes`
+      );
+
+      // Get file extension
+      const ext = path.extname(filePath).toLowerCase();
+      console.log(`File extension: ${ext}`);
+
       // Configure AssemblyAI transcription parameters
-      const params = {
-        audio: filePath,
-        language_code: languageCode,
-      };
+      // Determine which speech model to use
+      let speechModel = "universal";
 
       // Apply different models based on retry attempt to get varied results
       if (isRetryAttempt) {
@@ -132,43 +140,81 @@ async function transcribeAudio(
 
         // Different strategies for different retry attempts
         if (attemptNumber % 3 === 0) {
-          // Strategy 1: Use the standard model with higher quality
-          params.speech_model = "standard";
-          console.log("Retry strategy: Using standard model with high quality");
+          // Strategy 1: Use the best model with higher quality
+          speechModel = "best";
+          console.log("Retry strategy: Using best model with high quality");
         } else if (attemptNumber % 3 === 1) {
           // Strategy 2: Try the universal model
-          params.speech_model = "universal";
+          speechModel = "universal";
           console.log("Retry strategy: Using universal model");
         } else {
-          // Strategy 3: Use the standard model with different settings
-          params.speech_model = "standard";
-          params.punctuate = true;
-          params.format_text = true;
-          console.log(
-            "Retry strategy: Using standard model with text formatting"
-          );
+          // Strategy 3: Try the nano model with text formatting
+          speechModel = "nano";
+          console.log("Retry strategy: Using nano model with text formatting");
         }
       } else {
         // Use universal model for initial attempts (best general-purpose model)
-        params.speech_model = "universal";
+        speechModel = "universal";
       }
 
-      console.log(`Using speech model: ${params.speech_model}`);
+      console.log(`Using speech model: ${speechModel}`);
       console.log("Sending request to AssemblyAI...");
 
       try {
+        // First, upload the audio file
+        console.log("Uploading audio file to AssemblyAI...");
+        const uploadResponse = await speechClient.files.upload(audioBuffer);
+        console.log("Upload successful:", uploadResponse);
+
+        // Create transcription parameters
+        const transcriptionParams = {
+          audio_url: uploadResponse,
+          speech_model: speechModel,
+        };
+
+        // Set language code if provided
+        if (languageCode) {
+          transcriptionParams.language_code = languageCode;
+        }
+
+        // Log the parameters we're sending to AssemblyAI
+        console.log("AssemblyAI parameters:", {
+          ...transcriptionParams,
+          audio_url: uploadResponse,
+        });
+
         // Execute the transcription with a timeout
+        console.log("Sending transcription request to AssemblyAI...");
+
+        // Submit the transcription request
         const transcriptionPromise =
-          speechClient.transcripts.transcribe(params);
-        const transcript = await promiseWithTimeout(
+          speechClient.transcripts.transcribe(transcriptionParams);
+
+        // Get the initial transcription response
+        const transcriptionResponse = await promiseWithTimeout(
           transcriptionPromise,
           60000, // 60 second timeout
           "AssemblyAI transcription request timed out after 60 seconds"
         );
 
         console.log(
-          `Transcription successful with model: ${params.speech_model}`
+          "Received initial response from AssemblyAI:",
+          transcriptionResponse
         );
+
+        // Wait for the transcription to complete
+        console.log("Waiting for transcription to complete...");
+        const transcript = await speechClient.transcripts.waitUntilReady(
+          transcriptionResponse.id,
+          {
+            pollingInterval: 3000, // Poll every 3 seconds
+          }
+        );
+
+        console.log("Transcription completed!");
+        console.log("Received final transcript from AssemblyAI:", transcript);
+
+        console.log(`Transcription successful with model: ${speechModel}`);
 
         if (!transcript || !transcript.text) {
           console.warn("Warning: Received empty transcript from AssemblyAI");

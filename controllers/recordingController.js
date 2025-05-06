@@ -74,11 +74,24 @@ const recordingController = {
   handleAudioUpload: async (req, res) => {
     console.log("Audio file upload received from frontend");
 
+    // Log request details for debugging
+    console.log("Request headers:", req.headers);
+    console.log("Request body:", req.body);
+
     // Check if we received a file
     if (!req.file) {
       console.error("No file was uploaded");
       return res.status(400).send("No audio file was uploaded");
     }
+
+    // Log file details
+    console.log("Uploaded file details:", {
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path,
+    });
 
     // Get the uploaded file path
     const uploadedFilePath = req.file.path;
