@@ -4,12 +4,17 @@ import { Platform } from "react-native";
 /**
  * Helper utility to diagnose connection issues
  */
-export const checkConnection = async (): Promise<{
+export interface ConnectionResult {
   success: boolean;
   message: string;
   details?: any;
   rawResponse?: string;
-}> => {
+  url?: string;
+  isHtmlResponse?: boolean;
+  parseError?: string;
+}
+
+export const checkConnection = async (): Promise<ConnectionResult> => {
   console.log("Checking connection to backend server...");
   console.log(`API_URL from environment: ${API_URL}`);
 
@@ -33,19 +38,18 @@ export const checkConnection = async (): Promise<{
     console.log(`On Android, also trying alternative URL: ${alternativeUrl}`);
 
     // Try both URLs
-    const results = await Promise.all([
-      tryConnection(API_URL),
-      tryConnection(alternativeUrl),
-    ]);
+    const primaryResult = await tryConnection(API_URL);
 
-    // Return the successful result if any
-    const successResult = results.find((result) => result.success);
-    if (successResult) {
-      return successResult;
+    if (primaryResult.success) {
+      return primaryResult;
     }
 
-    // If both failed, return the first result
-    return results[0];
+    // If primary failed, try the alternative URL
+    console.log(
+      `Primary connection failed, trying alternative URL: ${alternativeUrl}`
+    );
+    const alternativeResult = await tryConnection(alternativeUrl);
+    return alternativeResult; // Return alternative result whether success or failure
   }
 
   // For other platforms, just try the configured URL
@@ -55,15 +59,7 @@ export const checkConnection = async (): Promise<{
 /**
  * Try to connect to a specific URL and return the result
  */
-const tryConnection = async (
-  url: string
-): Promise<{
-  success: boolean;
-  message: string;
-  details?: any;
-  rawResponse?: string;
-  url?: string;
-}> => {
+const tryConnection = async (url: string): Promise<ConnectionResult> => {
   try {
     console.log(`Attempting connection to: ${url}`);
 

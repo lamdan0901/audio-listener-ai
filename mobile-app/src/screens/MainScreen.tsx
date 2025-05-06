@@ -34,8 +34,10 @@ import {
 import {
   checkAndFixSocketConnection,
   reconnectSocket,
+  diagnoseConnection,
+  checkServerReachability,
 } from "../services/socketService";
-import { checkConnection } from "../utils/connectionHelper";
+import { checkConnection, ConnectionResult } from "../utils/connectionHelper";
 import { checkApiEndpoint } from "../utils/apiEndpointChecker";
 import { API_URL } from "@env";
 import AudioDeviceSelector from "../components/AudioDeviceSelector";
@@ -93,11 +95,8 @@ const MainScreen: React.FC = () => {
   const [canCancel, setCanCancel] = useState<boolean>(false);
 
   // Connection status
-  const [connectionStatus, setConnectionStatus] = useState<{
-    success: boolean;
-    message: string;
-    details?: any;
-  } | null>(null);
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionResult | null>(null);
 
   const [questionText, setQuestionText] = useState<string>("");
   const [answerText, setAnswerText] = useState<string>("");
@@ -417,15 +416,42 @@ const MainScreen: React.FC = () => {
     setLoadingMessage("Reconnecting to server...");
 
     try {
-      // First check if the server is reachable
-      const isServerReachable = await checkServerReachability();
+      // Run comprehensive connection diagnostics
+      console.log("Running connection diagnostics...");
+      const diagnostics = await diagnoseConnection();
+      console.log("Connection diagnostics:", diagnostics);
 
-      if (!isServerReachable) {
+      if (!diagnostics.serverReachable) {
         console.error("Server is not reachable");
+
+        // Show detailed diagnostic information
         Alert.alert(
           "Server Unreachable",
-          `Could not reach the server at ${API_URL}. Please check your network connection and server status.`,
+          `Could not reach the server at ${API_URL}.\n\nDiagnostic details:\n` +
+            `- Status endpoint: ${
+              diagnostics.endpoints.status ? "Reachable" : "Unreachable"
+            }\n` +
+            `- Socket.IO endpoint: ${
+              diagnostics.endpoints.socketIO ? "Reachable" : "Unreachable"
+            }\n` +
+            `- Root endpoint: ${
+              diagnostics.endpoints.root ? "Reachable" : "Unreachable"
+            }\n` +
+            `- Network online: ${
+              diagnostics.networkInfo.online ? "Yes" : "No"
+            }\n` +
+            `- Platform: ${diagnostics.networkInfo.platform}`,
           [
+            {
+              text: "View Full Diagnostics",
+              onPress: () => {
+                Alert.alert(
+                  "Connection Diagnostics",
+                  JSON.stringify(diagnostics, null, 2),
+                  [{ text: "OK" }]
+                );
+              },
+            },
             {
               text: "Check Network Settings",
               onPress: () => {
@@ -452,47 +478,83 @@ const MainScreen: React.FC = () => {
         return false;
       }
 
-      // Check connection to backend server
-      const connection = await checkConnection();
-      console.log("Connection check result:", connection);
+      // Server is reachable, now check if socket exists and is connected
+      if (diagnostics.socketExists && diagnostics.socketConnected) {
+        console.log("Socket is already connected");
+        Alert.alert(
+          "Connection Status",
+          "Socket is already connected to the server.\n\n" +
+            `Transport type: ${diagnostics.transportType || "Unknown"}`
+        );
 
-      if (connection.success) {
-        // Try to reconnect the socket
-        const reconnected = await checkAndFixSocketConnection();
-
-        if (reconnected) {
-          console.log("Socket reconnected successfully");
-          Alert.alert(
-            "Connection Restored",
-            "Successfully reconnected to the server."
-          );
-
-          // Fetch initial server status
-          const initialStatus = await getStatusApi();
-          if (initialStatus) {
-            setCanFollowUp(initialStatus.hasLastQuestion);
-            console.log("Initial server status:", initialStatus);
-          }
-
-          return true;
-        } else {
-          console.error("Failed to reconnect socket");
-          Alert.alert(
-            "Connection Error",
-            "Failed to establish socket connection to the server. This might be due to network issues or server configuration.",
-            [
-              { text: "Try Again", onPress: handleReconnectSocket },
-              { text: "Cancel" },
-            ]
-          );
-          return false;
+        // Fetch initial server status
+        const initialStatus = await getStatusApi();
+        if (initialStatus) {
+          setCanFollowUp(initialStatus.hasLastQuestion);
+          console.log("Initial server status:", initialStatus);
         }
+
+        setStatus("idle");
+        return true;
+      }
+
+      // Socket exists but not connected, or doesn't exist
+      console.log("Attempting to fix socket connection");
+
+      // Try to reconnect the socket
+      const reconnected = await checkAndFixSocketConnection();
+
+      if (reconnected) {
+        console.log("Socket reconnected successfully");
+
+        // Run diagnostics again to confirm
+        const confirmDiagnostics = await diagnoseConnection();
+
+        Alert.alert(
+          "Connection Restored",
+          "Successfully reconnected to the server.\n\n" +
+            `Transport type: ${confirmDiagnostics.transportType || "Unknown"}`
+        );
+
+        // Fetch initial server status
+        const initialStatus = await getStatusApi();
+        if (initialStatus) {
+          setCanFollowUp(initialStatus.hasLastQuestion);
+          console.log("Initial server status:", initialStatus);
+        }
+
+        return true;
       } else {
-        console.error("Server connection failed:", connection.message);
+        console.error("Failed to reconnect socket");
+
+        // Run diagnostics again to get updated information
+        const failedDiagnostics = await diagnoseConnection();
+
         Alert.alert(
           "Connection Error",
-          `Could not connect to the server: ${connection.message}`,
+          "Failed to establish socket connection to the server.\n\n" +
+            "Diagnostic details:\n" +
+            `- Server reachable: ${
+              failedDiagnostics.serverReachable ? "Yes" : "No"
+            }\n` +
+            `- Socket exists: ${
+              failedDiagnostics.socketExists ? "Yes" : "No"
+            }\n` +
+            `- Socket connected: ${
+              failedDiagnostics.socketConnected ? "Yes" : "No"
+            }\n` +
+            `- Transport type: ${failedDiagnostics.transportType || "None"}`,
           [
+            {
+              text: "View Full Diagnostics",
+              onPress: () => {
+                Alert.alert(
+                  "Connection Diagnostics",
+                  JSON.stringify(failedDiagnostics, null, 2),
+                  [{ text: "OK" }]
+                );
+              },
+            },
             { text: "Try Again", onPress: handleReconnectSocket },
             { text: "Cancel" },
           ]
@@ -503,7 +565,8 @@ const MainScreen: React.FC = () => {
       console.error("Error reconnecting:", error);
       Alert.alert(
         "Connection Error",
-        "An error occurred while trying to reconnect.",
+        "An error occurred while trying to reconnect: " +
+          (error instanceof Error ? error.message : String(error)),
         [
           { text: "Try Again", onPress: handleReconnectSocket },
           { text: "Cancel" },
@@ -611,7 +674,7 @@ const MainScreen: React.FC = () => {
         const recordingStarted = await startRecording();
 
         // Only log success if recording actually started
-        if (recordingStarted !== false) {
+        if (recordingStarted === true) {
           console.log("Recording started successfully");
         } else {
           throw new Error("Start encountered an error: recording not started");
@@ -800,43 +863,76 @@ const MainScreen: React.FC = () => {
                   HTML response detected - API may not be available
                 </Text>
               )}
+              {!connectionStatus.success && (
+                <Text style={styles.connectionStatusSubtext}>
+                  {connectionStatus.message || "Could not connect to server"}
+                </Text>
+              )}
+              {isConnected && (
+                <Text style={styles.connectionStatusSubtext}>
+                  Socket connected: {socketInstance?.id || "Unknown"}
+                </Text>
+              )}
             </View>
             <TouchableOpacity
               onPress={async () => {
                 setConnectionStatus(null);
+
+                // Run comprehensive diagnostics
+                const diagnostics = await diagnoseConnection();
+                console.log("Connection diagnostics:", diagnostics);
+
+                // Then check regular connection
                 const connection = await checkConnection();
                 setConnectionStatus(connection);
-                if (!connection.success) {
-                  // Show more detailed error information
-                  Alert.alert(
-                    "Connection Error",
-                    `Could not connect to the backend server: ${connection.message}\n\n` +
-                      `URL: ${connection.url || API_URL}\n\n` +
-                      (connection.rawResponse
-                        ? `Server response: ${connection.rawResponse.substring(
-                            0,
-                            150
-                          )}...`
-                        : "No response from server"),
-                    [
-                      {
-                        text: "View Details",
-                        onPress: () => {
-                          Alert.alert(
-                            "Connection Details",
-                            JSON.stringify(connection, null, 2),
-                            [{ text: "OK" }]
-                          );
-                        },
+
+                // Show detailed diagnostic information
+                Alert.alert(
+                  connection.success ? "Connection Status" : "Connection Error",
+                  `${
+                    connection.success ? "Connected to" : "Could not connect to"
+                  } the backend server: ${connection.message || ""}\n\n` +
+                    `URL: ${connection.url || API_URL}\n\n` +
+                    `Socket Status:\n` +
+                    `- Socket exists: ${
+                      diagnostics.socketExists ? "Yes" : "No"
+                    }\n` +
+                    `- Socket connected: ${
+                      diagnostics.socketConnected ? "Yes" : "No"
+                    }\n` +
+                    `- Transport type: ${
+                      diagnostics.transportType || "None"
+                    }\n\n` +
+                    `Endpoints:\n` +
+                    `- Status endpoint: ${
+                      diagnostics.endpoints.status ? "Reachable" : "Unreachable"
+                    }\n` +
+                    `- Socket.IO endpoint: ${
+                      diagnostics.endpoints.socketIO
+                        ? "Reachable"
+                        : "Unreachable"
+                    }\n` +
+                    `- Root endpoint: ${
+                      diagnostics.endpoints.root ? "Reachable" : "Unreachable"
+                    }`,
+                  [
+                    {
+                      text: "View Full Diagnostics",
+                      onPress: () => {
+                        Alert.alert(
+                          "Connection Diagnostics",
+                          JSON.stringify(diagnostics, null, 2),
+                          [{ text: "OK" }]
+                        );
                       },
-                      { text: "OK" },
-                    ]
-                  );
-                }
+                    },
+                    { text: "OK" },
+                  ]
+                );
               }}
               style={styles.retryButton}
             >
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>Diagnose</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1050,12 +1146,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
   },
   scrollContent: {
-    padding: 16,
+    padding: 20,
+    paddingBottom: 50,
   },
   title: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 25,
     textAlign: "center",
     color: "#343a40",
   },
@@ -1064,50 +1161,53 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginBottom: 8,
     color: "#495057",
   },
   switchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
-    marginTop: 5,
+    justifyContent: "space-between",
+    paddingVertical: 5,
   },
   activeText: {
     fontWeight: "bold",
     color: "#007bff",
-    marginHorizontal: 8,
   },
   inactiveText: {
     color: "#6c757d",
-    marginHorizontal: 8,
   },
   statusContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    paddingVertical: 15,
     marginBottom: 15,
     backgroundColor: "#e9ecef",
-    padding: 10,
-    borderRadius: 4,
+    borderRadius: 5,
+    minHeight: 50,
   },
   statusText: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 16,
+    color: "#495057",
+    marginRight: 5,
   },
   buttonContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
     marginBottom: 20,
     gap: 10,
   },
   resultText: {
-    fontSize: 16,
-    lineHeight: 24,
-    backgroundColor: "#f1f3f5",
+    fontSize: 15,
+    color: "#212529",
     padding: 10,
+    backgroundColor: "#fff",
     borderRadius: 4,
-    borderLeftWidth: 3,
-    borderLeftColor: "#007bff",
+    borderWidth: 1,
+    borderColor: "#e9ecef",
   },
   pickerContainer: {
     borderWidth: 1,
@@ -1198,26 +1298,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 12,
   },
-  // ... (Keep existing styles: resultText, disabledText, markdownStyles, etc.)
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
-  scrollContent: { padding: 20, paddingBottom: 50 },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 25,
-    textAlign: "center",
-    color: "#343a40",
-  },
-  section: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: "600", marginBottom: 8, color: "#495057" },
-  switchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 5,
-  },
-  activeText: { fontWeight: "bold", color: "#007bff" },
-  inactiveText: { color: "#6c757d" },
   textArea: {
     borderWidth: 1,
     borderColor: "#ced4da",
@@ -1228,36 +1308,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     minHeight: 60,
   },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
-    marginBottom: 15,
-    backgroundColor: "#e9ecef",
-    borderRadius: 5,
-    minHeight: 50,
+  loader: {
+    marginLeft: 5,
   },
-  statusText: { fontSize: 16, color: "#495057", marginRight: 5 },
-  loader: { marginLeft: 5 },
-  loadingText: { fontSize: 14, marginLeft: 5, color: "#495057" },
-  buttonContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-around",
-    marginBottom: 20,
-    gap: 10,
+  loadingText: {
+    fontSize: 14,
+    marginLeft: 5,
+    color: "#495057",
   },
-  resultText: {
-    fontSize: 15,
-    color: "#212529",
-    padding: 10,
-    backgroundColor: "#fff",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+  disabledText: {
+    color: "#adb5bd",
   },
-  disabledText: { color: "#adb5bd" },
 });
 
 const markdownStyles = StyleSheet.create({

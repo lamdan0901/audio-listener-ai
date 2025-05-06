@@ -13,19 +13,7 @@ if (!API_URL) {
 let effectiveApiUrl = API_URL;
 
 // Special handling for Android emulator
-if (
-  Platform.OS === "android" &&
-  effectiveApiUrl &&
-  effectiveApiUrl.includes("192.168.")
-) {
-  effectiveApiUrl = effectiveApiUrl.replace(
-    /192\.168\.[0-9]+\.[0-9]+/,
-    "10.0.2.2"
-  );
-  console.log(
-    `Android emulator detected, using modified API URL: ${effectiveApiUrl}`
-  );
-}
+// Use the API_URL directly, assuming it's correctly configured for the environment
 
 // Construct base URL for API endpoints (assuming /api/v1 path)
 const API_BASE_URL = effectiveApiUrl
@@ -197,12 +185,12 @@ export const stopRecordingAndUpload = async (
 
       console.log(`Final MIME type for upload: ${mimeType}`);
 
-      const uploadResult = await FileSystem.uploadAsync(url, audioUri, {
+      // Create upload options with proper type handling
+      const uploadOptions: FileSystem.FileSystemUploadOptions = {
         httpMethod: "POST",
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         fieldName: "audio", // Matches the field name expected by multer on the backend
         mimeType: mimeType, // Use the determined MIME type
-        fileName: filename, // Specify the filename with extension
         parameters: {
           // Send other parameters as form fields
           language: params.language,
@@ -215,7 +203,19 @@ export const stopRecordingAndUpload = async (
         headers: {
           // Add any necessary headers, e.g., Authorization
         },
-      });
+      };
+
+      // Add fileName using type assertion to avoid TypeScript error
+      const uploadOptionsWithFileName = {
+        ...uploadOptions,
+        fileName: filename, // Specify the filename with extension
+      } as FileSystem.FileSystemUploadOptions;
+
+      const uploadResult = await FileSystem.uploadAsync(
+        url,
+        audioUri,
+        uploadOptionsWithFileName
+      );
 
       console.log("Upload Result:", uploadResult);
 

@@ -14,7 +14,7 @@ export type AudioSourceType = "microphone" | "system";
 
 interface AudioRecorderState {
   isRecording: boolean;
-  startRecording: () => Promise<void>;
+  startRecording: () => Promise<boolean | undefined>; // Returns success status
   stopRecording: () => Promise<string | null>; // Returns the URI of the recording
   recordingInstance: Audio.Recording | null;
   permissionResponse: Audio.PermissionResponse | null;
@@ -36,6 +36,9 @@ export const useAudioRecorder = (): AudioRecorderState => {
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSourceType>("microphone");
+
+  // Ref to track if stopAndUnloadAsync has been called
+  const isUnloadingRef = useRef(false);
 
   // Define recording options for speech recognition
   // Using simpler options that are more likely to work across devices
@@ -119,7 +122,7 @@ export const useAudioRecorder = (): AudioRecorderState => {
     requestPermissions();
   }, []);
 
-  const startRecording = async (): Promise<boolean> => {
+  const startRecording = async (): Promise<boolean | undefined> => {
     if (permissionResponse?.status !== "granted") {
       Alert.alert(
         "Permissions Required",
@@ -175,7 +178,18 @@ export const useAudioRecorder = (): AudioRecorderState => {
               "Unloading existing recording instance before starting new one"
             );
             try {
-              await recordingInstance.stopAndUnloadAsync();
+              // Use type assertion to handle the TypeScript error
+              const recording = recordingInstance as Audio.Recording | null;
+              if (
+                recording &&
+                typeof recording.stopAndUnloadAsync === "function"
+              ) {
+                await recording.stopAndUnloadAsync();
+              } else {
+                console.warn(
+                  "Recording instance does not have stopAndUnloadAsync method"
+                );
+              }
               setRecordingInstance(null);
             } catch (unloadError) {
               console.error("Error unloading existing recording:", unloadError);
@@ -277,8 +291,12 @@ export const useAudioRecorder = (): AudioRecorderState => {
     console.log("Stopping recording...");
     setIsRecording(false); // Update state immediately for UI responsiveness
     try {
-      await recordingInstance.stopAndUnloadAsync();
-      const uri = recordingInstance.getURI();
+      // Use type assertion to handle TypeScript error
+      const recording = recordingInstance as any;
+      // Set ref before unloading
+      isUnloadingRef.current = true;
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
       console.log("Recording stopped and stored at", uri);
 
       // Check if the URI is valid
@@ -435,12 +453,23 @@ export const useAudioRecorder = (): AudioRecorderState => {
   // Cleanup recording instance if component unmounts while recording
   useEffect(() => {
     return () => {
-      if (recordingInstance) {
+      // Only attempt to unload if stopAndUnloadAsync was not called by stopRecording
+      if (recordingInstance && !isUnloadingRef.current) {
         console.log("Unmounting: Stopping and unloading recording instance.");
-        recordingInstance.stopAndUnloadAsync();
+        // Use type assertion to handle TypeScript error
+        const recording = recordingInstance as any;
+        if (typeof recording.stopAndUnloadAsync === "function") {
+          recording
+            .stopAndUnloadAsync()
+            .catch((err: Error) =>
+              console.error("Error stopping recording on unmount:", err)
+            );
+        }
       }
+      // Reset the ref when the effect cleans up
+      isUnloadingRef.current = false;
     };
-  }, [recordingInstance]);
+  }, [recordingInstance]); // Depend on recordingInstance to re-run cleanup if instance changes
 
   return {
     isRecording,

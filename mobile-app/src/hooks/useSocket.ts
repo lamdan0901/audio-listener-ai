@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Socket } from "socket.io-client";
 import { getSocket, disconnectSocket } from "../services/socketService";
+import { API_URL } from "@env";
 
 interface SocketState {
   isConnected: boolean;
@@ -53,8 +54,77 @@ export const useSocket = (): SocketState => {
       // Log more detailed error information
       console.error("useSocket: Error details:", error.message);
 
-      // Handle timeout errors specifically
-      if (error.message === "timeout") {
+      // Get network information if available
+      try {
+        const netInfo = {
+          online: typeof navigator !== "undefined" && navigator.onLine,
+          userAgent: navigator.userAgent,
+          url: API_URL,
+        };
+        console.log("useSocket: Network info:", netInfo);
+      } catch (e) {
+        console.log("useSocket: Could not get network info");
+      }
+
+      // Handle different error types
+      const errorMessage = error.message.toLowerCase();
+
+      // Handle websocket errors
+      if (errorMessage.includes("websocket")) {
+        console.log(
+          "useSocket: Websocket error detected, will use polling transport only"
+        );
+
+        // Disconnect and recreate the socket with polling transport only
+        setTimeout(() => {
+          try {
+            if (socketRef.current) {
+              console.log(
+                "useSocket: Disconnecting socket with websocket error"
+              );
+              socketRef.current.disconnect();
+              socketRef.current = null;
+            }
+
+            // Import the socket service dynamically
+            import("../services/socketService").then(
+              ({ getSocket, disconnectSocket }) => {
+                console.log(
+                  "useSocket: Creating new socket with polling transport only"
+                );
+                socketRef.current = getSocket();
+
+                // Add a one-time listener to check if connection succeeds
+                if (socketRef.current) {
+                  socketRef.current.once("connect", () => {
+                    console.log(
+                      "useSocket: Successfully connected with polling transport"
+                    );
+                  });
+
+                  // Also set a timeout to check if connection succeeded
+                  setTimeout(() => {
+                    if (socketRef.current && !socketRef.current.connected) {
+                      console.log(
+                        "useSocket: Still not connected after retry, will try again"
+                      );
+                      disconnectSocket();
+                      socketRef.current = getSocket();
+                    }
+                  }, 5000);
+                }
+              }
+            );
+          } catch (e) {
+            console.error(
+              "useSocket: Error recreating socket after websocket error:",
+              e
+            );
+          }
+        }, 2000);
+      }
+      // Handle timeout errors
+      else if (errorMessage === "timeout") {
         console.log(
           "useSocket: Timeout error detected, attempting to fix connection"
         );
@@ -68,15 +138,66 @@ export const useSocket = (): SocketState => {
               socketRef.current = null;
             }
 
-            console.log("useSocket: Creating new socket after timeout");
-            socketRef.current = getSocket();
+            // Try to check server reachability before creating a new socket
+            import("../services/socketService")
+              .then(({ checkServerReachability }) => {
+                checkServerReachability().then((isReachable) => {
+                  if (isReachable) {
+                    console.log(
+                      "useSocket: Server is reachable, creating new socket"
+                    );
+                    socketRef.current = getSocket();
+                  } else {
+                    console.error(
+                      "useSocket: Server is not reachable, will retry later"
+                    );
+                    // Schedule another retry after a longer delay
+                    setTimeout(() => {
+                      console.log(
+                        "useSocket: Retrying connection after server unreachable"
+                      );
+                      socketRef.current = getSocket();
+                    }, 5000);
+                  }
+                });
+              })
+              .catch((e) => {
+                console.error(
+                  "useSocket: Error importing checkServerReachability:",
+                  e
+                );
+                // Fallback to just creating a new socket
+                console.log(
+                  "useSocket: Creating new socket after timeout (fallback)"
+                );
+                socketRef.current = getSocket();
+              });
           } catch (e) {
             console.error(
               "useSocket: Error recreating socket after timeout:",
               e
             );
           }
-        }, 1000);
+        }, 2000); // Increased delay before reconnection attempt
+      }
+      // Handle other errors
+      else {
+        console.log(
+          `useSocket: Generic error detected: ${errorMessage}, attempting to reconnect`
+        );
+
+        // Simple reconnection for other errors
+        setTimeout(() => {
+          try {
+            if (socketRef.current) {
+              socketRef.current.disconnect();
+              socketRef.current = null;
+            }
+            socketRef.current = getSocket();
+          } catch (e) {
+            console.error("useSocket: Error during generic reconnection:", e);
+          }
+        }, 3000);
       }
     };
 

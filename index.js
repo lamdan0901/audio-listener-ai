@@ -53,6 +53,14 @@ app.use(
 const recordingRoutes = require("./routes/recordingRoutes")();
 const statusRoutes = require("./routes/statusRoutes")();
 
+// Middleware to log Socket.IO polling requests
+app.use("/socket.io", (req, res, next) => {
+  console.log(
+    `Received request for Socket.IO path: ${req.method} ${req.originalUrl}`
+  );
+  next(); // Continue to the next middleware/handler (which should be Socket.IO)
+});
+
 // Set up API routes with proper versioning
 app.use("/api/v1/recording", recordingRoutes);
 app.use("/api/v1/status", statusRoutes);
@@ -98,6 +106,7 @@ app.use((req, res) => {
 });
 
 io.on("connection", (socket) => {
+  console.log("Attempting to establish Socket.IO connection...");
   const clientInfo = {
     id: socket.id,
     transport: socket.conn.transport.name,
