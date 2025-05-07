@@ -1,9 +1,6 @@
 # Audio Listener AI - Software Analysis and Design Document
 
-<div align="center">
-  <img src="diagrams/images/platform_component_diagram.svg" alt="Audio Listener AI System Overview" width="800">
-  <p><em>Figure 1: Audio Listener AI System Overview</em></p>
-</div>
+> **Note**: All diagrams in this document are available as high-quality SVG files in the `diagrams/images` folder. For the best viewing experience, use a PDF viewer or web browser that supports SVG rendering.
 
 ## Table of Contents
 
@@ -39,13 +36,16 @@
 15. [Development Guidelines](#15-development-guidelines)
 16. [Conclusion](#16-conclusion)
 
+<div align="center">
+  <img src="diagrams/images/platform_component_diagram.svg" alt="Audio Listener AI System Overview" width="100%">
+  <p><em>Figure 1: Audio Listener AI System Overview</em></p>
+</div>
+
 ## 1. Executive Summary
 
 Audio Listener AI is a multi-platform application that allows users to record audio questions, process them using speech-to-text technology, and receive AI-generated answers. The system supports multiple platforms including web, desktop (Electron), mobile (React Native), and Chrome extension. It uses AssemblyAI for speech-to-text conversion and Google's Gemini AI for generating responses.
 
-This document provides a comprehensive analysis of the system architecture, components, data flow, and design patterns to guide development and maintenance.
-
-> **Note**: All diagrams in this document are available as high-quality SVG files in the `diagrams/images` folder. For the best viewing experience, use a PDF viewer or web browser that supports SVG rendering.
+This document provides a comprehensive analysis of the system architecture, components, data flow, and design patterns to guide development and maintenance. The architecture follows a client-server model where frontend applications record audio and send it to the backend for processing, which then returns AI-generated responses.
 
 ## 2. System Overview
 
@@ -120,10 +120,11 @@ The diagram above illustrates the relationships between different components acr
 
 2. **Transcription Flow**:
 
-   - Backend sends audio to AssemblyAI
+   - Backend sends audio to AssemblyAI with appropriate speech model
    - AssemblyAI returns transcribed text
    - Backend sends transcript to client
    - Backend stores transcript for potential follow-up
+   - If transcription fails or is empty, backend implements retry logic with different speech models
 
 3. **AI Processing Flow**:
 
@@ -202,8 +203,12 @@ The diagram above illustrates how data moves through the system, including the a
 
 ### 4.5 External Service Integration
 
-- **AssemblyAI Client**: Handles speech-to-text conversion
-- **Google Gemini AI Client**: Processes text and generates responses
+- **AssemblyAI Client**: Handles speech-to-text conversion with multiple model options:
+  - **Universal Model**: Default model for general-purpose transcription
+  - **Best Model**: Higher quality model for clearer audio
+  - **Nano Model**: Lightweight model for faster processing
+  - **SLAM-1 Model**: Specialized model for certain use cases
+- **Google Gemini AI Client**: Processes text and generates responses using Gemini 2.0 Flash model
 
 <div align="center">
   <img src="diagrams/images/backend_class_diagram.svg" alt="Backend Class Diagram" width="800">
@@ -233,18 +238,20 @@ The diagram above shows the main backend components of the Audio Listener AI sys
 - **Main Process**: Electron main process (main.ts)
 - **Renderer Process**: UI components and user interaction
 - **Preload Script**: Secure bridge between main and renderer
-- **Audio Device Manager**: Manages audio input devices
+- **Audio Device Manager**: Manages audio input devices and selection
 - **Audio Recorder**: Handles audio recording with MediaRecorder API
-- **System Audio Capture**: Captures system audio using Electron's desktopCapturer
+- **System Audio Capture**: Captures system audio using Electron's desktopCapturer and loopback audio
+- **Audio Source Selection**: Allows users to choose between microphone and system audio
 
 ### 5.4 Mobile Application (React Native/Expo)
 
 - **React Native Components**: UI components for mobile
-- **Expo Audio**: Audio recording and playback
+- **Expo Audio**: Audio recording and playback with optimized settings
 - **Custom Hooks**: React hooks for audio, socket, and state management
-- **API Service**: Communication with backend server
+- **API Service**: Communication with backend server using platform-specific implementations
 - **Socket Service**: Real-time communication with Socket.IO
 - **AsyncStorage**: Local storage for settings and history
+- **Platform-specific Audio Settings**: Optimized audio recording settings for Android and iOS
 
 ### 5.5 Chrome Extension
 
@@ -375,9 +382,10 @@ All platforms share these core UI elements:
 
 **Web Application:**
 
-- Full-page layout
-- History sidebar
-- Responsive design for desktop and mobile browsers
+- Full-page layout with responsive design
+- History sidebar with vertical layout
+- Markdown rendering for AI responses
+- Socket.IO debug panel (development only)
 
 **Desktop Application:**
 
@@ -385,6 +393,8 @@ All platforms share these core UI elements:
 - Audio device selection dropdown
 - Audio source selection (microphone/system audio)
 - Debug information panel
+- History section with vertical layout matching web app
+- Markdown rendering for AI responses
 
 **Mobile Application:**
 
@@ -392,12 +402,15 @@ All platforms share these core UI elements:
 - Touch-optimized controls
 - Platform-specific audio permissions
 - Simplified history view
+- Adaptive layout for different screen sizes
+- Network status indicators
 
 **Chrome Extension:**
 
 - Compact popup interface
 - Limited history display
 - Quick access controls
+- Automatic microphone permission handling
 
 ## 9. Error Handling and Recovery
 
@@ -411,11 +424,16 @@ All platforms share these core UI elements:
 
 ### 9.2 Error Handling Strategy
 
-- **Client-side**: Display user-friendly error messages
+- **Client-side**: Display user-friendly error messages with clear instructions
 - **Server-side**: Log detailed errors and return appropriate status codes
-- **Retry Mechanism**: Automatic retry for transcription with different models
+- **Retry Mechanism**: Automatic retry for transcription with different speech models:
+  - First attempt: Universal model (default)
+  - First retry: Best model (higher quality)
+  - Second retry: Nano model (lightweight)
+  - Third retry: Universal model with different settings
 - **Graceful Degradation**: Fall back to alternative methods when possible
 - **Error Events**: Broadcast errors via Socket.IO for real-time notification
+- **Cancellation Support**: Allow users to cancel ongoing processing
 
 <div align="center">
   <img src="diagrams/images/state_diagram.svg" alt="Application State Diagram" width="800">
@@ -448,8 +466,10 @@ The diagram above illustrates the different states of the Audio Listener AI appl
 ### 11.1 Audio Processing
 
 - Optimize audio file size for network transfer
-- Use appropriate sample rates (16000Hz standard)
-- Clean up audio files to prevent disk space issues
+- Use standard 16000Hz sample rate for speech recognition across all platforms
+- Mono audio (single channel) for better speech recognition
+- Support for various audio formats (WAV, MP3, MP4, M4A)
+- Clean up audio files after processing to prevent disk space issues
 
 ### 11.2 Real-time Communication
 
