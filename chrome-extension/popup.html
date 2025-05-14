@@ -2,105 +2,7 @@
 <html>
   <head>
     <title>AI Recording Assistant</title>
-    <style>
-      body {
-        width: 400px; /* Adjust width as needed */
-        font-family: sans-serif;
-        padding: 10px;
-        font-size: 14px;
-      }
-      h1 {
-        font-size: 18px;
-        margin-top: 0;
-        text-align: center;
-      }
-      #language-selection,
-      #question-context-selection,
-      #custom-context-container,
-      #follow-up-selection,
-      #status,
-      #loading {
-        margin-bottom: 10px;
-      }
-      label {
-        margin-right: 10px;
-      }
-      select,
-      textarea {
-        width: 100%;
-        box-sizing: border-box; /* Include padding and border in the element's total width and height */
-        margin-top: 5px;
-      }
-      textarea {
-        resize: vertical;
-      }
-      button {
-        margin-right: 5px;
-        margin-top: 5px;
-        padding: 5px 10px;
-        cursor: pointer;
-      }
-      #status {
-        font-weight: bold;
-        padding: 5px;
-        border-radius: 3px;
-      }
-      .status.idle {
-        background-color: #eee;
-        color: #333;
-      }
-      .status.recording {
-        background-color: #ffdddd;
-        color: #a00;
-      }
-      .status.loading {
-        background-color: #ddffdd;
-        color: #0a0;
-        display: flex;
-        align-items: center;
-      }
-      #loading {
-        display: none;
-      } /* Initially hidden */
-      .loader {
-        border: 4px solid #f3f3f3; /* Light grey */
-        border-top: 4px solid #3498db; /* Blue */
-        border-radius: 50%;
-        width: 16px;
-        height: 16px;
-        animation: spin 2s linear infinite;
-        margin-right: 10px;
-      }
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-      #question,
-      #answer {
-        margin-top: 15px;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: #f9f9f9;
-        min-height: 30px;
-        word-wrap: break-word;
-      }
-      #question:empty,
-      #answer:empty {
-        display: none; /* Hide empty result boxes */
-      }
-      strong {
-        display: block;
-        margin-bottom: 5px;
-      }
-      details > summary {
-        cursor: pointer;
-      }
-    </style>
+    <link rel="stylesheet" href="styles/popup.css">
     <!-- TODO: Add marked.min.js if markdown rendering is needed for the answer -->
   </head>
   <body>
@@ -141,7 +43,7 @@
     </details>
 
     <div class="status idle" id="status">Status: Idle</div>
-    <div id="loading" class="status loading">
+    <div id="loading-indicator" class="status loading">
       <div class="loader"></div>
       <span>Processing...</span>
     </div>

@@ -111,6 +111,18 @@ function updateLastQuestionState(statusData) {
 
 // --- Event Listeners ---
 
+// Listen for clicks on the extension's action icon (toolbar icon)
+chrome.action.onClicked.addListener(async (tab) => {
+  console.log("Extension icon clicked, attempting to open side panel.");
+  try {
+    // Open the side panel in the current window
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+    console.log("Side panel open command issued.");
+  } catch (error) {
+    console.error("Error opening side panel:", error);
+  }
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Extension installed or updated.");
   // Initialize state or perform setup
