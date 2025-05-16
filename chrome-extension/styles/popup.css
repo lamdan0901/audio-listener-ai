@@ -27,6 +27,17 @@ button {
   transition: background-color 0.2s ease;
 }
 
+.error {
+  color: #dc3545;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+  text-align: center;
+  font-size: 14px;
+}
+
 /* General Status Styles - from desktop */
 .status {
   padding: 10px;
@@ -45,12 +56,22 @@ button {
   color: #2e7d32; /* Desktop color */
 }
 
+.status.warning {
+  background: #fff3e0; /* Light orange background */
+  color: #e65100; /* Dark orange text */
+}
+
+.status.error {
+  background: #ffebee; /* Light red background */
+  color: #b71c1c; /* Dark red text */
+}
+
 .status.loading, /* Combined from desktop and extension */
 #loading-indicator {
   /* New ID for the loading container */
   background: #e3f2fd; /* Desktop color */
   color: #1976d2; /* Desktop color */
-  display: none; /* Initially hidden */
+  display: none; /* Initially hidden - will be controlled by JavaScript */
   align-items: center;
   padding: 10px;
   margin: 10px 0;
@@ -137,9 +158,13 @@ details#custom-context-container summary {
   transition: all 0.3s ease; /* Desktop style */
 }
 
-#question:empty,
-#answer:empty {
+#question:empty {
   display: none;
+}
+
+/* Keep the answer element visible even when empty */
+#answer {
+  min-height: 50px; /* Ensure it has some height even when empty */
 }
 
 #question strong, /* For 'Question:' text if added */
@@ -242,6 +267,159 @@ button:disabled {
   50% {
     border-right-color: #1976d2;
   } /* Match loading/action color */
+}
+
+/* Permission instructions */
+.permission-instructions {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 14px;
+  display: none; /* Hidden by default */
+}
+
+.permission-instructions h3 {
+  margin-top: 0;
+  color: #d32f2f;
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.permission-instructions p {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.permission-instructions ol {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+
+.permission-instructions li {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.permission-button {
+  background-color: #1a73e8;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 10px;
+  font-weight: 500;
+  display: block;
+  margin: 15px auto;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.permission-button:hover {
+  background-color: #0d47a1;
+}
+
+.permission-button:active {
+  background-color: #3e8e41;
+}
+
+.permission-image {
+  margin-top: 15px;
+  text-align: center;
+  margin: 10px 0;
+}
+
+.permission-image img {
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Permission notification */
+.permission-notification {
+  margin-top: 15px;
+  padding: 12px;
+  background-color: #e8f4fd;
+  border-left: 4px solid #1a73e8;
+  border-radius: 4px;
+  font-size: 13px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  animation: fadeIn 0.5s;
+}
+
+.permission-notification p {
+  margin-top: 0;
+  font-weight: 500;
+  color: #1a73e8;
+}
+
+.permission-notification ol {
+  margin-bottom: 0;
+  padding-left: 20px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Sticky action buttons */
+.sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: white;
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* Scroll to top button */
+.scroll-top-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #2196f3;
+  color: white;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 0;
+  z-index: 1000;
+}
+
+.scroll-top-btn:hover {
+  background-color: #1976d2;
+}
+
+.scroll-top-btn.visible {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Utility for hiding elements */

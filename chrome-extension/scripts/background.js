@@ -1,8 +1,7 @@
 // Background service worker for the AI Recording Assistant Extension
 
-// Import the Socket.IO client library
 try {
-  importScripts("lib/socket.io.min.js"); // Adjust path if needed
+  importScripts("lib/socket.io.min.js");
 } catch (e) {
   console.error("Failed to import Socket.IO client library:", e);
 }
@@ -21,37 +20,91 @@ let currentOperationAbortController = null; // To cancel ongoing fetch requests
 const API_BASE_URL = "http://localhost:3033"; // Your backend API URL
 const SOCKET_URL = "http://localhost:3033"; // Your Socket.IO server URL
 
-// --- Helper Functions ---
+let isPopupOpen = false;
+let messageQueue = [];
 
-// Function to send messages to the popup (if open)
 async function sendMessageToPopup(message) {
-  // Make async if we need to wait for storage
-  console.log(
-    `sendMessageToPopup: Attempting to send message:`,
-    JSON.stringify(message)
-  ); // Log message being sent
-  chrome.runtime.sendMessage(message, (response) => {
-    if (chrome.runtime.lastError) {
-      // Handle error, e.g., popup not open
+  return new Promise((resolve) => {
+    try {
+      if (!isPopupOpen) {
+        console.log("Popup closed, queuing message:", message.action);
+        messageQueue.push(message);
+        resolve(false);
+        return;
+      }
+
       console.log(
-        `sendMessageToPopup: Error sending message (popup might be closed):`,
-        chrome.runtime.lastError.message
+        `sendMessageToPopup: Attempting to send message:`,
+        JSON.stringify(message)
       );
-    } else {
-      // Optional: Handle response from popup
-      console.log(
-        `sendMessageToPopup: Message sent successfully, response from popup:`,
-        response
-      );
+
+      chrome.runtime.sendMessage(message, (response) => {
+        if (!chrome.runtime?.id) {
+          console.log("sendMessageToPopup: Extension context invalidated");
+          resolve(false);
+          return;
+        }
+        if (chrome.runtime.lastError) {
+          if (
+            chrome.runtime.lastError.message.includes(
+              "receiving end does not exist"
+            )
+          ) {
+            console.log(
+              "sendMessageToPopup: Popup closed during send, requeuing message"
+            );
+            messageQueue.push(message);
+            isPopupOpen = false;
+          } else {
+            console.error(
+              `sendMessageToPopup: Error sending message:`,
+              chrome.runtime.lastError.message
+            );
+          }
+          resolve(false);
+          return;
+        }
+
+        console.log(
+          `sendMessageToPopup: Message sent successfully, response from popup:`,
+          response
+        );
+        resolve(true);
+      });
+
+      // Update internal status tracker
+      if (message.action === "statusUpdate" && message.payload.statusText) {
+        currentStatusText = message.payload.statusText;
+      }
+    } catch (error) {
+      console.error("sendMessageToPopup: Unexpected error:", error);
+      resolve(false);
     }
   });
-  // Also update our internal status tracker
-  if (message.action === "statusUpdate" && message.payload.statusText) {
-    currentStatusText = message.payload.statusText;
-    // Persist essential state for when popup reopens (optional but good practice)
-    // await chrome.storage.local.set({ backgroundState: { isRecording, currentStatusText } });
+}
+
+// Flush queued messages when popup reopens
+function flushMessageQueue() {
+  while (messageQueue.length > 0 && isPopupOpen) {
+    const message = messageQueue.shift();
+    sendMessageToPopup(message).then((success) => {
+      if (!success) {
+        messageQueue.unshift(message); // Re-add to queue if failed
+      }
+    });
   }
 }
+
+// Monitor popup visibility changes
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "popup") {
+    isPopupOpen = true;
+    flushMessageQueue();
+    port.onDisconnect.addListener(() => {
+      isPopupOpen = false;
+    });
+  }
+});
 
 // Function to safely make fetch requests with cancellation
 async function makeApiRequest(endpoint, options = {}, signal) {
@@ -98,9 +151,22 @@ async function makeApiRequest(endpoint, options = {}, signal) {
 // Function to update the shared state about the last question
 function updateLastQuestionState(statusData) {
   if (statusData) {
-    hasLastQuestion = statusData.hasLastQuestion || false;
-    lastQuestionPreview = statusData.lastQuestionPreview || "";
-    console.log(`Background state updated: hasLastQuestion=${hasLastQuestion}`);
+    // If we have a transcript in the data, use it to determine if we have a last question
+    if (statusData.transcript) {
+      hasLastQuestion = true;
+      lastQuestionPreview =
+        statusData.transcript.substring(0, 50) +
+        (statusData.transcript.length > 50 ? "..." : "");
+    } else {
+      // Otherwise use the provided hasLastQuestion flag if available
+      hasLastQuestion = statusData.hasLastQuestion || false;
+      lastQuestionPreview = statusData.lastQuestionPreview || "";
+    }
+
+    console.log(
+      `Background state updated: hasLastQuestion=${hasLastQuestion}, preview="${lastQuestionPreview}"`
+    );
+
     // Notify popup about the status change
     sendMessageToPopup({
       action: "statusUpdate",
@@ -253,6 +319,8 @@ function connectSocketIO() {
 // The basic client library handles some reconnection, but complex scenarios might need more logic.
 connectSocketIO();
 
+// Socket.IO connection is now established
+
 // Listener for messages from popup
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   console.log("Background received message:", request);
@@ -379,7 +447,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         console.log("Ongoing operation aborted.");
       }
 
-      // Send success response
       sendResponse({ success: true });
       return false;
 
@@ -395,13 +462,21 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         canGemini,
         hasLastQuestion,
         lastQuestionPreview,
+        queuedMessages: messageQueue.length,
       };
       console.log(
         "Sent current internal status to popup:",
         currentInternalStatus
       );
       sendResponse({ success: true, data: currentInternalStatus });
-      return false; // No async work
+      return false;
+
+    case "flushQueue":
+      if (messageQueue.length > 0) {
+        messageQueue.forEach((msg) => sendMessageToPopup(msg));
+        messageQueue = [];
+      }
+      break;
 
     default:
       console.log("Background received unhandled action:", request.action);

@@ -2,8 +2,8 @@
 <html>
   <head>
     <title>AI Recording Assistant</title>
-    <link rel="stylesheet" href="styles/popup.css">
-    <!-- TODO: Add marked.min.js if markdown rendering is needed for the answer -->
+    <link rel="stylesheet" href="styles/popup.css" />
+    <script src="lib/marked.min.js"></script>
   </head>
   <body>
     <h1>Audio Listener AI</h1>
@@ -47,6 +47,7 @@
       <div class="loader"></div>
       <span>Processing...</span>
     </div>
+    <div id="error-message" class="error" style="display: none"></div>
 
     <div id="follow-up-selection">
       <label>
@@ -60,22 +61,35 @@
       </label>
     </div>
 
-    <div>
-      <button id="toggleBtn">Start Listening</button>
-      <button id="retryBtn" disabled>Retry</button>
-      <button id="geminiBtn" disabled>Gemini</button>
-      <button id="cancelBtn" disabled>Cancel</button>
+    <div id="action-buttons-container" class="sticky-top">
+      <div class="action-buttons-group">
+        <button id="toggleBtn">Start Listening</button>
+        <button id="retryBtn" disabled>Retry</button>
+        <button id="geminiBtn" disabled>Gemini</button>
+        <button id="cancelBtn" disabled>Cancel</button>
+        <button id="reset-button">Reset State</button>
+      </div>
     </div>
-    <button id="reset-button">Reset State</button>
 
     <div id="question"></div>
-    <div id="answer"></div>
+    <div id="answer">
+      <!-- This div will contain the answer content -->
+      <div id="answer-placeholder" style="color: #888; font-style: italic">
+        Answer will appear here...
+      </div>
+    </div>
 
-    <!-- Link adapted scripts -->
-    <script src="main.js"></script>
-    <script src="audio-recorder.js"></script>
-    <script src="audio-controls.js"></script>
-    <!-- Link popup.js to initialize controls -->
-    <script src="popup.js"></script>
+    <image
+      id="scroll-to-top"
+      title="Scroll to top"
+      src="images/up-arrow.svg"
+      alt="Scroll to top"
+      class="scroll-top-btn"
+    />
+
+    <script src="scripts/audio-recorder.js"></script>
+    <script src="scripts/audio-controls.js"></script>
+    <script src="scripts/main.js"></script>
+    <script src="scripts/popup.js"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 // Global state for the extension
-let isRecording = false;
+let isCurrentlyRecording = false; // Renamed from isRecording to avoid conflict with audio-recorder.js
 let lastAudioFile = null; // May need adjustment based on how audio is handled
 let isCancelled = false;
 let hasLastQuestion = false; // Track if we have a previous question from the backend
@@ -32,6 +32,7 @@ function handleBackgroundResponse(message) {
     switch (message.action) {
       case "statusUpdate":
         hasLastQuestion = message.payload.hasLastQuestion;
+        isCurrentlyRecording = message.payload.isRecording || false; // Update our local state
         const followUpCheckbox = document.getElementById("isFollowUpCheckbox");
         if (followUpCheckbox) {
           followUpCheckbox.disabled = !hasLastQuestion;
@@ -63,8 +64,32 @@ function handleBackgroundResponse(message) {
 
 // Load saved context and initialize listeners when the popup DOM is ready
 document.addEventListener("DOMContentLoaded", function () {
-  // TODO: Add reference to animation reset if needed (requires animation.js)
-  // resetAnimationState();
+  console.log("DOM content loaded, initializing extension...");
+
+  // Check if audio-recorder.js is loaded properly
+  if (typeof window.audioRecorder === "undefined") {
+    console.error(
+      "Audio recorder not available - audio-recorder.js may not be loaded correctly"
+    );
+
+    // Show error message to user
+    const statusEl = document.getElementById("status");
+    if (statusEl) {
+      statusEl.textContent = "Status: Error - Audio recorder not available";
+      statusEl.className = "status error";
+      statusEl.style.display = "block";
+    }
+
+    // Disable the toggle button
+    const toggleBtn = document.getElementById("toggleBtn");
+    if (toggleBtn) {
+      toggleBtn.disabled = true;
+      toggleBtn.title =
+        "Audio recorder not available. Please reload the extension.";
+    }
+  } else {
+    console.log("Audio recorder found and ready to use");
+  }
 
   // Restore saved question context from localStorage
   const savedQuestionContext = localStorage.getItem("questionContext");
@@ -128,8 +153,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // TODO: Add listeners for recording buttons (requires audio-controls.js adaptation)
-  // setupAudioControls();
+  // Set up audio controls if the function is available
+  if (typeof setupAudioControls === "function") {
+    setupAudioControls();
+    console.log("Audio controls set up successfully");
+  } else {
+    console.error(
+      "setupAudioControls function not found - audio-controls.js may not be loaded correctly"
+    );
+  }
 
   // Listen for messages from the background script
   chrome.runtime.onMessage.addListener(handleBackgroundResponse);

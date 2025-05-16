@@ -11,7 +11,10 @@
     "audioCapture",
     "microphone",
     "tabCapture",
-    "sidePanel"
+    "sidePanel",
+    "desktopCapture",
+    "audio",
+    "tabs"
   ],
   "action": {
     "default_icon": {
@@ -29,7 +32,7 @@
     "default_path": "popup.html"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "scripts/background.js"
   },
   "host_permissions": ["http://localhost:3033/*"]
 }
