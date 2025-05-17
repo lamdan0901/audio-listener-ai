@@ -197,10 +197,7 @@ async function transcribeAudio(
           "AssemblyAI transcription request timed out after 60 seconds"
         );
 
-        console.log(
-          "Received initial response from AssemblyAI:",
-          transcriptionResponse
-        );
+        console.log("Received initial response from AssemblyAI.");
 
         // Wait for the transcription to complete
         console.log("Waiting for transcription to complete...");
@@ -212,7 +209,10 @@ async function transcribeAudio(
         );
 
         console.log("Transcription completed!");
-        console.log("Received final transcript from AssemblyAI:", transcript);
+        console.log(
+          "Received final transcript from AssemblyAI:",
+          transcript.text
+        );
 
         console.log(`Transcription successful with model: ${speechModel}`);
 

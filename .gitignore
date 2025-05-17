@@ -25,6 +25,6 @@ dist-ssr
 .env
 tsconfig.node.tsbuildinfo
 vite.config.d.ts
-audio/*
+server/audio/*
 LLM.zip
 vite.config.js

@@ -1,7 +1,7 @@
 // Background service worker for the AI Recording Assistant Extension
 
 try {
-  importScripts("lib/socket.io.min.js");
+  importScripts("../lib/socket.io.min.js");
 } catch (e) {
   console.error("Failed to import Socket.IO client library:", e);
 }

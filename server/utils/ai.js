@@ -110,19 +110,11 @@ async function generateAnswer(
   question,
   lang,
   questionContext = "general",
-  previousQuestion = null,
-  streaming = false,
-  customContext = ""
+  previousQuestion = null
 ) {
   const model = getConfiguredGeminiModel();
   const contextPrompt = getContextPrompt(questionContext);
-  const prompt = buildPrompt(
-    question,
-    lang,
-    contextPrompt,
-    previousQuestion,
-    customContext
-  );
+  const prompt = buildPrompt(question, lang, contextPrompt, previousQuestion);
 
   const result = await tryCatch(model.generateContent(prompt));
 

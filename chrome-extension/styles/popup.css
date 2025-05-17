@@ -235,15 +235,6 @@ details#custom-context-container summary {
   background-color: #d32f2f;
 }
 
-#reset-button {
-  /* Style for reset button */
-  background-color: #607d8b; /* Blue Grey */
-  color: white;
-}
-#reset-button:hover:not(:disabled) {
-  background-color: #546e7a;
-}
-
 /* Disabled state for all buttons */
 button:disabled {
   background-color: #e0e0e0; /* Lighter grey for disabled */

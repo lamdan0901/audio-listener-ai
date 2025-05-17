@@ -159,9 +159,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Answer element not found in the DOM during initialization!");
   }
 
-  // Use the existing errorMessageElement variable
-  const resetButton = document.getElementById("reset-button");
-
   // --- Scroll to Top Button Functionality ---
   if (scrollToTopBtn) {
     // Show button when user scrolls down 100px from the top
@@ -259,56 +256,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error(
       "setupAudioControls function not found. Ensure audio-controls.js is loaded correctly."
     );
-  }
-  // Initial UI state will be set by calling requestAndUpdateUI below.
-
-  // --- Reset Button Listener ---
-  if (resetButton) {
-    resetButton.addEventListener("click", async () => {
-      console.log("Reset button clicked.");
-
-      // Clear local storage completely
-      await clearState();
-
-      // Also clear the last session marker
-      try {
-        await chrome.storage.local.remove(LAST_SESSION_KEY);
-        console.log("Last session marker cleared.");
-      } catch (error) {
-        console.error("Error clearing last session marker:", error);
-      }
-
-      // Reset text areas
-      if (transcriptAreaElement) {
-        transcriptAreaElement.textContent = "";
-        transcriptAreaElement.style.display = "none";
-      }
-
-      if (answerAreaElement) {
-        answerAreaElement.textContent = "";
-        // Show the placeholder if it exists
-        const placeholder = document.getElementById("answer-placeholder");
-        if (placeholder) {
-          placeholder.style.display = "block";
-        }
-      }
-
-      if (errorMessageElement) {
-        errorMessageElement.textContent = "";
-        errorMessageElement.style.display = "none";
-      }
-
-      currentAnswer = "";
-
-      // Send cancel message to background FIRST
-      chrome.runtime.sendMessage({ action: "cancelOperation" }, () => {
-        // AFTER background confirms (or fails), refresh UI from background state
-        requestAndUpdateUI();
-        console.log("Cancel operation sent, UI refresh requested.");
-      });
-    });
-  } else {
-    console.warn("Reset button not found in popup.html");
   }
 
   // --- Message Listener from Background Script ---
