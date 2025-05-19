@@ -39,13 +39,15 @@ function createGenAIClient(apiKey) {
  * Get a configured Gemini model with appropriate safety settings
  * @param {GoogleGenerativeAI} genAI - The Google Generative AI client
  * @param {Object} config - Configuration options
- * @param {string} config.modelName - Name of the model to use (default: "gemini-2.0-flash-001")
+ * @param {string} config.modelName - Name of the model to use
  * @param {boolean} config.withSafetySettings - Whether to include safety settings
  * @returns {Object} - Configured Gemini model instance
  */
 function getGeminiModel(genAI, config = {}) {
-  const { modelName = "gemini-2.0-flash-001", withSafetySettings = false } =
-    config;
+  const {
+    modelName = "gemini-2.5-flash-preview-04-17",
+    withSafetySettings = false,
+  } = config;
 
   const modelConfig = { model: modelName };
 

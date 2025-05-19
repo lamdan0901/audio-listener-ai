@@ -161,7 +161,8 @@ function connectGlobalSocket(url) {
 setTimeout(function () {
   if (typeof io !== "undefined") {
     console.log("Socket.IO is available globally, attempting connection...");
-    connectGlobalSocket("http://localhost:3033");
+    const apiUrl = window.electronAPI.getApiBaseUrl();
+    connectGlobalSocket(apiUrl);
   } else {
     console.error("Socket.IO is not available globally");
     alert(
