@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
@@ -15,6 +15,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Add a method to get the Electron version
   getElectronVersion: () => process.versions.electron,
+
+  // Add methods for always on top functionality
+  toggleAlwaysOnTop: async () => {
+    return await ipcRenderer.invoke("toggle-always-on-top");
+  },
+
+  getAlwaysOnTopState: async () => {
+    return await ipcRenderer.invoke("get-always-on-top-state");
+  },
+
+  // Add a method to check if we're in development mode
+  isDevelopment: () => {
+    // process.env.NODE_ENV is set by Electron Forge during build
+    // It will be 'production' in production builds and 'development' in dev mode
+    return process.env.NODE_ENV !== "production";
+  },
 });
 
 // No need to expose additional APIs for audio recording as it's handled in the renderer process

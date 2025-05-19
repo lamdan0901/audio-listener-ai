@@ -81,6 +81,7 @@ async function toggleRecording() {
 
 // Expose functions to the global scope
 window.toggleRecording = toggleRecording;
+window.toggleAlwaysOnTop = toggleAlwaysOnTop;
 
 // Function to update connection status display
 function updateConnectionStatus() {
@@ -114,6 +115,32 @@ function updateConnectionStatus() {
   setTimeout(updateConnectionStatus, 2000);
 }
 
+// Function to toggle always on top state
+async function toggleAlwaysOnTop() {
+  try {
+    // Call the main process to toggle the always on top state
+    const isAlwaysOnTop = await window.electronAPI.toggleAlwaysOnTop();
+
+    // Update the button appearance
+    const alwaysOnTopBtn = document.getElementById("alwaysOnTopBtn");
+    const pinText = document.getElementById("pinText");
+
+    if (alwaysOnTopBtn) {
+      if (isAlwaysOnTop) {
+        alwaysOnTopBtn.classList.add("active");
+        if (pinText) pinText.textContent = "Disable Top";
+      } else {
+        alwaysOnTopBtn.classList.remove("active");
+        if (pinText) pinText.textContent = "Keep on Top";
+      }
+    }
+
+    console.log(`Always on top state: ${isAlwaysOnTop}`);
+  } catch (error) {
+    console.error("Error toggling always on top:", error);
+  }
+}
+
 // Load saved question context on page load
 document.addEventListener("DOMContentLoaded", function () {
   // Reset animation state on page load
@@ -126,6 +153,26 @@ document.addEventListener("DOMContentLoaded", function () {
     window.animationInProgress = false;
     window.animationQueue = [];
     window.streamedContent = "";
+  }
+
+  // Set up always on top button
+  const alwaysOnTopBtn = document.getElementById("alwaysOnTopBtn");
+  if (alwaysOnTopBtn) {
+    alwaysOnTopBtn.addEventListener("click", toggleAlwaysOnTop);
+
+    // Initialize button state
+    window.electronAPI
+      .getAlwaysOnTopState()
+      .then((isAlwaysOnTop) => {
+        if (isAlwaysOnTop) {
+          alwaysOnTopBtn.classList.add("active");
+          const pinText = document.getElementById("pinText");
+          if (pinText) pinText.textContent = "Disable Top";
+        }
+      })
+      .catch((error) => {
+        console.error("Error getting always on top state:", error);
+      });
   }
 
   // Start connection status updates

@@ -1,24 +1,44 @@
 {
-  "name": "desktop-app",
+  "name": "audio-listener-ai",
+  "description": "Audio Listener AI - Desktop Application",
   "version": "1.0.0",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy:env",
     "start": "npm run build && electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "copy:env": "copyfiles -f .env.local dist .env",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dist": "npm run build && electron-builder --dir"
   },
   "keywords": [],
-  "author": "",
+  "author": "Anderson",
   "license": "ISC",
-  "description": "",
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^22.15.3",
+    "copyfiles": "^2.4.1",
     "electron": "^36.1.0",
+    "electron-builder": "^24.13.3",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "dotenv": "^16.5.0",
     "form-data": "^4.0.0"
+  },
+  "build": {
+    "files": [
+      "dist/**/*",
+      "src/index.html",
+      "src/style.css",
+      "src/js/**/*",
+      "!node_modules/.bin",
+      "node_modules/**/*.{js,json,node}"
+    ],
+    "directories": {
+      "output": "release/"
+    },
+    "appId": "com.anderson.audio-listener",
+    "productName": "Audio Transcriber",
+    "icon": "src/logo.ico"
   }
 }

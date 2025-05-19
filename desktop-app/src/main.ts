@@ -1,16 +1,22 @@
-import { app, BrowserWindow, Menu, desktopCapturer, session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  desktopCapturer,
+  session,
+  ipcMain,
+} from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 
-// Load environment variables from .env file
 dotenv.config();
 
-process.env.API_BASE_URL = "http://localhost:3033";
+process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
 let mainWindow: BrowserWindow;
+let isAlwaysOnTop = false;
 
 function createWindow() {
-  // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -25,8 +31,7 @@ function createWindow() {
   // We'll copy the public/index.html here later
   mainWindow.loadFile(path.join(__dirname, "../src/index.html")); // Adjust path to load from src
 
-  // Open the DevTools for debugging
-  mainWindow.webContents.openDevTools();
+  // DevTools can be opened manually from the Developer menu
 
   // Create application menu with audio test option
   const menu = Menu.buildFromTemplate([
@@ -37,39 +42,6 @@ function createWindow() {
           label: "Exit",
           click: () => {
             app.quit();
-          },
-        },
-      ],
-    },
-    {
-      label: "Tools",
-      submenu: [
-        {
-          label: "Audio Recording Test",
-          click: () => {
-            mainWindow.loadFile(path.join(__dirname, "../src/audio-test.html"));
-          },
-        },
-        {
-          label: "Minimal Audio Test",
-          click: () => {
-            mainWindow.loadFile(
-              path.join(__dirname, "../src/minimal-audio-test.html")
-            );
-          },
-        },
-        {
-          label: "Main Application",
-          click: () => {
-            mainWindow.loadFile(path.join(__dirname, "../src/index.html"));
-          },
-        },
-        {
-          label: "Fixed Application",
-          click: () => {
-            mainWindow.loadFile(
-              path.join(__dirname, "../src/fixed-index.html")
-            );
           },
         },
       ],
@@ -128,6 +100,18 @@ app.whenReady().then(() => {
         // Return an empty object instead of null to avoid TypeScript error
         callback({});
       });
+  });
+
+  // Set up IPC handler for toggling always on top
+  ipcMain.handle("toggle-always-on-top", () => {
+    isAlwaysOnTop = !isAlwaysOnTop;
+    mainWindow.setAlwaysOnTop(isAlwaysOnTop);
+    return isAlwaysOnTop;
+  });
+
+  // Set up IPC handler for getting the current always on top state
+  ipcMain.handle("get-always-on-top-state", () => {
+    return isAlwaysOnTop;
   });
 
   createWindow();

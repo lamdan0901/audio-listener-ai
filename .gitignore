@@ -28,3 +28,4 @@ vite.config.d.ts
 server/audio/*
 LLM.zip
 vite.config.js
+release
