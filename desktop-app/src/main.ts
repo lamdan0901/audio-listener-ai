@@ -11,7 +11,11 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
-process.env.NODE_ENV = process.env.NODE_ENV || "development";
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = app.isPackaged ? "production" : "development";
+}
+
+console.log("Main process NODE_ENV:", process.env.NODE_ENV);
 
 let mainWindow: BrowserWindow;
 let isAlwaysOnTop = false;
@@ -31,44 +35,31 @@ function createWindow() {
   // We'll copy the public/index.html here later
   mainWindow.loadFile(path.join(__dirname, "../src/index.html")); // Adjust path to load from src
 
-  // DevTools can be opened manually from the Developer menu
-
-  // Create application menu with audio test option
-  const menu = Menu.buildFromTemplate([
-    {
-      label: "File",
-      submenu: [
-        {
-          label: "Exit",
-          click: () => {
-            app.quit();
+  if (process.env.NODE_ENV === "development") {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: "Developer",
+        submenu: [
+          {
+            label: "Toggle DevTools",
+            accelerator:
+              process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
+            click: () => {
+              mainWindow.webContents.toggleDevTools();
+            },
           },
-        },
-      ],
-    },
-    {
-      label: "Developer",
-      submenu: [
-        {
-          label: "Toggle DevTools",
-          accelerator:
-            process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
-          click: () => {
-            mainWindow.webContents.toggleDevTools();
+          {
+            label: "Reload",
+            accelerator: "CmdOrCtrl+R",
+            click: () => {
+              mainWindow.reload();
+            },
           },
-        },
-        {
-          label: "Reload",
-          accelerator: "CmdOrCtrl+R",
-          click: () => {
-            mainWindow.reload();
-          },
-        },
-      ],
-    },
-  ]);
-
-  Menu.setApplicationMenu(menu);
+        ],
+      },
+    ]);
+    Menu.setApplicationMenu(menu);
+  }
 }
 
 // This method will be called when Electron has finished
@@ -112,6 +103,11 @@ app.whenReady().then(() => {
   // Set up IPC handler for getting the current always on top state
   ipcMain.handle("get-always-on-top-state", () => {
     return isAlwaysOnTop;
+  });
+
+  // Set up IPC handler for getting the NODE_ENV
+  ipcMain.handle("get-node-env", () => {
+    return process.env.NODE_ENV || "development";
   });
 
   createWindow();

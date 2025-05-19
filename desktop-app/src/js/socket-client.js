@@ -10,31 +10,36 @@ let isConnected = false;
 // We need to reference the global isCancelled variable
 // This is defined in main.js and used across multiple files
 
+// Cache for development state
+let devEnvironmentCache = null;
+
 /**
  * Detects if the application is running in development mode
- * @returns {boolean} - True if in development mode
+ * @returns {Promise<boolean>} - Promise resolving to true if in development mode
  */
-function isDevEnvironment() {
-  // Check if DevTools are open (a good indicator of development mode)
-  const devToolsOpen =
-    window.outerWidth - window.innerWidth > 160 ||
-    window.outerHeight - window.innerHeight > 160;
+async function isDevEnvironment() {
+  // Return from cache if already determined
+  if (devEnvironmentCache !== null) {
+    return devEnvironmentCache;
+  }
 
-  // Check if we're running in Electron
+  // First, check if we're in Electron and can use the isDevelopment API
   const isElectron =
     window.navigator.userAgent.toLowerCase().indexOf("electron") > -1;
 
-  // In Electron, we can check if DevTools are enabled in the window
-  const electronDevTools =
-    isElectron && window.electronAPI && window.electronAPI.getElectronVersion;
+  if (isElectron && window.electronAPI && window.electronAPI.isDevelopment) {
+    try {
+      devEnvironmentCache = await window.electronAPI.isDevelopment();
+      return devEnvironmentCache;
+    } catch (error) {
+      console.error("Error getting development environment status:", error);
+      devEnvironmentCache = true; // Default to true on error
+      return true;
+    }
+  }
 
-  // Check URL for localhost or development indicators
-  const isLocalhost =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
-
-  // Return true if any of these conditions are met
-  return devToolsOpen || electronDevTools || isLocalhost;
+  devEnvironmentCache = true; // Default to true for non-Electron environments
+  return true;
 }
 
 /**
@@ -109,167 +114,41 @@ async function initializeSocket(serverUrl) {
         console.log("Socket transport type:", socket.io.engine.transport.name);
         console.log("Socket protocol:", socket.io.engine.transport.protocol);
 
-        // Only show debug info in development environment
-        if (isDevEnvironment()) {
-          // Create the debug container
-          const debugInfo = document.createElement("div");
-          debugInfo.id = "socket-debug-info";
-          debugInfo.style.cssText =
-            "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
-
-          // Create the debug content container (initially hidden)
-          const debugContent = document.createElement("div");
-          debugContent.id = "socket-debug-content";
-          debugContent.style.cssText = "display: none; padding: 10px;";
-          debugContent.innerHTML = `
-              Connected: true<br>
-              Socket ID: ${socket.id}<br>
-              Transport: ${socket.io.engine.transport.name}<br>
-              Server URL: ${serverUrl}<br>
-          `;
-
-          // Create the header/toggle button
-          const debugHeader = document.createElement("div");
-          debugHeader.style.cssText =
-            "padding: 5px 10px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8);";
-          debugHeader.textContent = "Socket.IO Debug";
-          debugHeader.onclick = function () {
-            const content = document.getElementById("socket-debug-content");
-            if (content) {
-              if (content.style.display === "none") {
-                content.style.display = "block";
-              } else {
-                content.style.display = "none";
-              }
-            }
-          };
-
-          // Create close button
-          const closeButton = document.createElement("button");
-          closeButton.style.cssText = "margin-top: 10px;";
-          closeButton.textContent = "Close";
-          closeButton.onclick = function (e) {
-            e.stopPropagation(); // Prevent triggering the header click
-            document.getElementById("socket-debug-info").style.display = "none";
-          };
-
-          // Assemble the components
-          debugInfo.appendChild(debugHeader);
-          debugInfo.appendChild(debugContent);
-          debugContent.appendChild(closeButton);
-          document.body.appendChild(debugInfo);
-        }
-
-        isConnected = true;
-        resolve(true);
-      });
-
-      socket.on("connect_error", (error) => {
-        console.error(
-          "%c Socket.IO CONNECTION ERROR: " + error,
-          "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;"
-        );
-        console.error("Error details:", error);
-
-        // Display error info in the UI if in development mode
-        if (isDevEnvironment()) {
-          // Create the error container
-          const errorInfo = document.createElement("div");
-          errorInfo.id = "socket-error-info";
-          errorInfo.style.cssText =
-            "position: fixed; bottom: 10px; right: 10px; background: rgba(255,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
-
-          // Create the error content container (initially hidden)
-          const errorContent = document.createElement("div");
-          errorContent.id = "socket-error-content";
-          errorContent.style.cssText = "display: none; padding: 10px;";
-          errorContent.innerHTML = `
-              Error: ${error}<br>
-              Server URL: ${serverUrl}<br>
-          `;
-
-          // Create the header/toggle button
-          const errorHeader = document.createElement("div");
-          errorHeader.style.cssText =
-            "padding: 5px 10px; cursor: pointer; font-weight: bold; background: rgba(255,0,0,0.8);";
-          errorHeader.textContent = "Socket.IO Error";
-          errorHeader.onclick = function () {
-            const content = document.getElementById("socket-error-content");
-            if (content) {
-              if (content.style.display === "none") {
-                content.style.display = "block";
-              } else {
-                content.style.display = "none";
-              }
-            }
-          };
-
-          // Create close button
-          const closeButton = document.createElement("button");
-          closeButton.style.cssText = "margin-top: 10px;";
-          closeButton.textContent = "Close";
-          closeButton.onclick = function (e) {
-            e.stopPropagation(); // Prevent triggering the header click
-            document.getElementById("socket-error-info").style.display = "none";
-          };
-
-          // Assemble the components
-          errorInfo.appendChild(errorHeader);
-          errorInfo.appendChild(errorContent);
-          errorContent.appendChild(closeButton);
-          document.body.appendChild(errorInfo);
-        }
-
-        isConnected = false;
-        reject(error);
-      });
-
-      socket.on("disconnect", (reason) => {
-        console.log(
-          "%c Socket.IO DISCONNECTED: " + reason,
-          "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;"
-        );
-
-        // Update connection info in the UI if in development mode
-        if (isDevEnvironment()) {
-          const debugContent = document.getElementById("socket-debug-content");
-          if (debugContent) {
-            // Update just the content part, preserving the header and toggle functionality
-            debugContent.innerHTML = `
-              Connected: false<br>
-              Disconnect reason: ${reason}<br>
-              Server URL: ${serverUrl}<br>
-              <button onclick="document.getElementById('socket-debug-info').style.display='none'">Close</button>
-            `;
-          } else {
-            // If the debug info doesn't exist yet, create it
+        isDevEnvironment().then((isDev) => {
+          if (isDev) {
+            // Create the debug container
             const debugInfo = document.createElement("div");
             debugInfo.id = "socket-debug-info";
             debugInfo.style.cssText =
-              "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
+              "position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
 
             // Create the debug content container (initially hidden)
             const debugContent = document.createElement("div");
             debugContent.id = "socket-debug-content";
             debugContent.style.cssText = "display: none; padding: 10px;";
             debugContent.innerHTML = `
-                Connected: false<br>
-                Disconnect reason: ${reason}<br>
+                Connected: true<br>
+                Socket ID: ${socket.id}<br>
+                Transport: ${socket.io.engine.transport.name}<br>
                 Server URL: ${serverUrl}<br>
             `;
 
             // Create the header/toggle button
             const debugHeader = document.createElement("div");
             debugHeader.style.cssText =
-              "padding: 5px 10px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8);";
+              "padding: 3px 6px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8); font-size: 10px;";
             debugHeader.textContent = "Socket.IO Debug";
             debugHeader.onclick = function () {
               const content = document.getElementById("socket-debug-content");
               if (content) {
                 if (content.style.display === "none") {
                   content.style.display = "block";
+                  debugHeader.style.fontSize = "12px";
+                  debugHeader.style.padding = "5px 10px";
                 } else {
                   content.style.display = "none";
+                  debugHeader.style.fontSize = "10px";
+                  debugHeader.style.padding = "3px 6px";
                 }
               }
             };
@@ -290,9 +169,152 @@ async function initializeSocket(serverUrl) {
             debugContent.appendChild(closeButton);
             document.body.appendChild(debugInfo);
           }
-        }
+        });
+
+        isConnected = true;
+        resolve(true);
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error(
+          "%c Socket.IO CONNECTION ERROR: " + error,
+          "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
+        console.error("Error details:", error);
+
+        isDevEnvironment().then((isDev) => {
+          if (isDev) {
+            // Create the error container
+            const errorInfo = document.createElement("div");
+            errorInfo.id = "socket-error-info";
+            errorInfo.style.cssText =
+              "position: fixed; bottom: 10px; left: 10px; background: rgba(255,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
+
+            // Create the error content container (initially hidden)
+            const errorContent = document.createElement("div");
+            errorContent.id = "socket-error-content";
+            errorContent.style.cssText = "display: none; padding: 10px;";
+            errorContent.innerHTML = `
+                Error: ${error}<br>
+                Server URL: ${serverUrl}<br>
+            `;
+
+            // Create the header/toggle button
+            const errorHeader = document.createElement("div");
+            errorHeader.style.cssText =
+              "padding: 3px 6px; cursor: pointer; font-weight: bold; background: rgba(255,0,0,0.8); font-size: 10px;";
+            errorHeader.textContent = "Socket.IO Error";
+            errorHeader.onclick = function () {
+              const content = document.getElementById("socket-error-content");
+              if (content) {
+                if (content.style.display === "none") {
+                  content.style.display = "block";
+                  errorHeader.style.fontSize = "12px";
+                  errorHeader.style.padding = "5px 10px";
+                } else {
+                  content.style.display = "none";
+                  errorHeader.style.fontSize = "10px";
+                  errorHeader.style.padding = "3px 6px";
+                }
+              }
+            };
+
+            // Create close button
+            const closeButton = document.createElement("button");
+            closeButton.style.cssText = "margin-top: 10px;";
+            closeButton.textContent = "Close";
+            closeButton.onclick = function (e) {
+              e.stopPropagation(); // Prevent triggering the header click
+              document.getElementById("socket-error-info").style.display =
+                "none";
+            };
+
+            // Assemble the components
+            errorInfo.appendChild(errorHeader);
+            errorInfo.appendChild(errorContent);
+            errorContent.appendChild(closeButton);
+            document.body.appendChild(errorInfo);
+          }
+        });
 
         isConnected = false;
+        reject(error);
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log(
+          "%c Socket.IO DISCONNECTED: " + reason,
+          "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;"
+        );
+
+        isDevEnvironment().then((isDev) => {
+          if (isDev) {
+            const debugContent = document.getElementById(
+              "socket-debug-content"
+            );
+            if (debugContent) {
+              // Update just the content part, preserving the header and toggle functionality
+              debugContent.innerHTML = `
+                Connected: false<br>
+                Disconnect reason: ${reason}<br>
+                Server URL: ${serverUrl}<br>
+                <button onclick="document.getElementById('socket-debug-info').style.display='none'">Close</button>
+              `;
+            } else {
+              // If the debug info doesn't exist yet, create it
+              const debugInfo = document.createElement("div");
+              debugInfo.id = "socket-debug-info";
+              debugInfo.style.cssText =
+                "position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
+
+              // Create the debug content container (initially hidden)
+              const debugContent = document.createElement("div");
+              debugContent.id = "socket-debug-content";
+              debugContent.style.cssText = "display: none; padding: 10px;";
+              debugContent.innerHTML = `
+                  Connected: false<br>
+                  Disconnect reason: ${reason}<br>
+                  Server URL: ${serverUrl}<br>
+              `;
+
+              // Create the header/toggle button
+              const debugHeader = document.createElement("div");
+              debugHeader.style.cssText =
+                "padding: 3px 6px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8); font-size: 10px;";
+              debugHeader.textContent = "Socket.IO Debug";
+              debugHeader.onclick = function () {
+                const content = document.getElementById("socket-debug-content");
+                if (content) {
+                  if (content.style.display === "none") {
+                    content.style.display = "block";
+                    debugHeader.style.fontSize = "12px";
+                    debugHeader.style.padding = "5px 10px";
+                  } else {
+                    content.style.display = "none";
+                    debugHeader.style.fontSize = "10px";
+                    debugHeader.style.padding = "3px 6px";
+                  }
+                }
+              };
+
+              // Create close button
+              const closeButton = document.createElement("button");
+              closeButton.style.cssText = "margin-top: 10px;";
+              closeButton.textContent = "Close";
+              closeButton.onclick = function (e) {
+                e.stopPropagation(); // Prevent triggering the header click
+                document.getElementById("socket-debug-info").style.display =
+                  "none";
+              };
+
+              // Assemble the components
+              debugInfo.appendChild(debugHeader);
+              debugInfo.appendChild(debugContent);
+              debugContent.appendChild(closeButton);
+              document.body.appendChild(debugInfo);
+            }
+          }
+        });
       });
 
       // Monitor all incoming events for debugging
@@ -303,38 +325,41 @@ async function initializeSocket(serverUrl) {
         );
         console.log("Event data:", ...args);
 
-        // Update the debug info with the latest event if in development mode
-        if (isDevEnvironment()) {
-          const debugContent = document.getElementById("socket-debug-content");
-          if (debugContent) {
-            const eventData =
-              JSON.stringify(args[0]).substring(0, 50) +
-              (JSON.stringify(args[0]).length > 50 ? "..." : "");
-            const eventLine = document.createElement("div");
-            eventLine.innerHTML = `<small>${new Date().toLocaleTimeString()}: ${eventName} - ${eventData}</small>`;
+        isDevEnvironment().then((isDev) => {
+          if (isDev) {
+            const debugContent = document.getElementById(
+              "socket-debug-content"
+            );
+            if (debugContent) {
+              const eventData =
+                JSON.stringify(args[0]).substring(0, 50) +
+                (JSON.stringify(args[0]).length > 50 ? "..." : "");
+              const eventLine = document.createElement("div");
+              eventLine.innerHTML = `<small>${new Date().toLocaleTimeString()}: ${eventName} - ${eventData}</small>`;
 
-            // Insert before the close button
-            const closeButton = debugContent.querySelector("button");
-            if (closeButton) {
-              debugContent.insertBefore(eventLine, closeButton);
-            } else {
-              debugContent.appendChild(eventLine);
-            }
+              // Insert before the close button
+              const closeButton = debugContent.querySelector("button");
+              if (closeButton) {
+                debugContent.insertBefore(eventLine, closeButton);
+              } else {
+                debugContent.appendChild(eventLine);
+              }
 
-            // Limit to last 5 events
-            const events = debugContent.querySelectorAll("small");
-            if (events.length > 5) {
-              // Find the first event (after the static content) and remove it
-              for (let i = 0; i < events.length; i++) {
-                const event = events[i];
-                if (event.textContent.includes(":")) {
-                  event.parentNode.removeChild(event);
-                  break;
+              // Limit to last 5 events
+              const events = debugContent.querySelectorAll("small");
+              if (events.length > 5) {
+                // Find the first event (after the static content) and remove it
+                for (let i = 0; i < events.length; i++) {
+                  const event = events[i];
+                  if (event.textContent.includes(":")) {
+                    event.parentNode.removeChild(event);
+                    break;
+                  }
                 }
               }
             }
           }
-        }
+        });
       });
 
       // Set up event handlers for the application
@@ -417,22 +442,26 @@ function setupSocketEventHandlers() {
       ).innerHTML = `<strong>Question:</strong> ${formattedQuestion}`;
     }
 
-    // Add visual debugging information
-    const debugInfo = `
-      <div style="background-color: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc; font-family: monospace; font-size: 12px;">
-        <strong>Debug Info:</strong><br>
-        Transcript received: ${data.transcript}<br>
-        Socket.IO connected: ${socket.connected}<br>
-        Current time: ${new Date().toLocaleTimeString()}<br>
-      </div>
-    `;
+    let debugInfoHtml = "";
+    isDevEnvironment().then((isDev) => {
+      if (isDev) {
+        debugInfoHtml = `
+          <div style="background-color: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc; font-family: monospace; font-size: 12px;">
+            <strong>Debug Info:</strong><br>
+            Transcript received: ${data.transcript}<br>
+            Socket.IO connected: ${socket.connected}<br>
+            Current time: ${new Date().toLocaleTimeString()}<br>
+          </div>
+        `;
+      }
+    });
 
-    // Prepare for answer streaming with debug info
+    // Prepare for answer streaming with debug info if in development mode
     const answerElement = document.getElementById("answer");
     if (answerElement) {
       answerElement.innerHTML = `
         <strong>Answer:</strong>
-        ${debugInfo}
+        ${debugInfoHtml}
         <div id="livePreview">Waiting for response...</div>
         <div id="streamingContent" class="stream-active" style="display: none;"></div>
       `;
@@ -960,69 +989,77 @@ function manualConnect(url) {
           socketStatus.style.backgroundColor = "#4CAF50";
         }
 
-        // Update the debug info if in development mode
-        if (isDevEnvironment()) {
-          const debugContent = document.getElementById("socket-debug-content");
-          if (debugContent) {
-            // Update just the content part, preserving the header and toggle functionality
-            debugContent.innerHTML = `
-              Connected: true<br>
-              Socket ID: ${socket.id}<br>
-              Transport: ${socket.io.engine.transport.name}<br>
-              Server URL: ${url}<br>
-              <button onclick="document.getElementById('socket-debug-info').style.display='none'">Close</button>
-            `;
-          } else {
-            // If the debug info doesn't exist yet, create it
-            const debugInfo = document.createElement("div");
-            debugInfo.id = "socket-debug-info";
-            debugInfo.style.cssText =
-              "position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
-
-            // Create the debug content container (initially hidden)
-            const debugContent = document.createElement("div");
-            debugContent.id = "socket-debug-content";
-            debugContent.style.cssText = "display: none; padding: 10px;";
-            debugContent.innerHTML = `
+        // Use isDevEnvironment in a non-async context
+        isDevEnvironment().then((isDev) => {
+          if (isDev) {
+            const debugContent = document.getElementById(
+              "socket-debug-content"
+            );
+            if (debugContent) {
+              // Update just the content part, preserving the header and toggle functionality
+              debugContent.innerHTML = `
                 Connected: true<br>
                 Socket ID: ${socket.id}<br>
                 Transport: ${socket.io.engine.transport.name}<br>
                 Server URL: ${url}<br>
-            `;
+                <button onclick="document.getElementById('socket-debug-info').style.display='none'">Close</button>
+              `;
+            } else {
+              // If the debug info doesn't exist yet, create it
+              const debugInfo = document.createElement("div");
+              debugInfo.id = "socket-debug-info";
+              debugInfo.style.cssText =
+                "position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; overflow: hidden; transition: all 0.3s ease;";
 
-            // Create the header/toggle button
-            const debugHeader = document.createElement("div");
-            debugHeader.style.cssText =
-              "padding: 5px 10px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8);";
-            debugHeader.textContent = "Socket.IO Debug";
-            debugHeader.onclick = function () {
-              const content = document.getElementById("socket-debug-content");
-              if (content) {
-                if (content.style.display === "none") {
-                  content.style.display = "block";
-                } else {
-                  content.style.display = "none";
+              // Create the debug content container (initially hidden)
+              const debugContent = document.createElement("div");
+              debugContent.id = "socket-debug-content";
+              debugContent.style.cssText = "display: none; padding: 10px;";
+              debugContent.innerHTML = `
+                  Connected: true<br>
+                  Socket ID: ${socket.id}<br>
+                  Transport: ${socket.io.engine.transport.name}<br>
+                  Server URL: ${url}<br>
+              `;
+
+              // Create the header/toggle button
+              const debugHeader = document.createElement("div");
+              debugHeader.style.cssText =
+                "padding: 3px 6px; cursor: pointer; font-weight: bold; background: rgba(0,0,0,0.8); font-size: 10px;";
+              debugHeader.textContent = "Socket.IO Debug";
+              debugHeader.onclick = function () {
+                const content = document.getElementById("socket-debug-content");
+                if (content) {
+                  if (content.style.display === "none") {
+                    content.style.display = "block";
+                    debugHeader.style.fontSize = "12px";
+                    debugHeader.style.padding = "5px 10px";
+                  } else {
+                    content.style.display = "none";
+                    debugHeader.style.fontSize = "10px";
+                    debugHeader.style.padding = "3px 6px";
+                  }
                 }
-              }
-            };
+              };
 
-            // Create close button
-            const closeButton = document.createElement("button");
-            closeButton.style.cssText = "margin-top: 10px;";
-            closeButton.textContent = "Close";
-            closeButton.onclick = function (e) {
-              e.stopPropagation(); // Prevent triggering the header click
-              document.getElementById("socket-debug-info").style.display =
-                "none";
-            };
+              // Create close button
+              const closeButton = document.createElement("button");
+              closeButton.style.cssText = "margin-top: 10px;";
+              closeButton.textContent = "Close";
+              closeButton.onclick = function (e) {
+                e.stopPropagation(); // Prevent triggering the header click
+                document.getElementById("socket-debug-info").style.display =
+                  "none";
+              };
 
-            // Assemble the components
-            debugInfo.appendChild(debugHeader);
-            debugInfo.appendChild(debugContent);
-            debugContent.appendChild(closeButton);
-            document.body.appendChild(debugInfo);
+              // Assemble the components
+              debugInfo.appendChild(debugHeader);
+              debugInfo.appendChild(debugContent);
+              debugContent.appendChild(closeButton);
+              document.body.appendChild(debugInfo);
+            }
           }
-        }
+        });
 
         // Set up event handlers for the application
         setupSocketEventHandlers();

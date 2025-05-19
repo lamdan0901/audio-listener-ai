@@ -13,10 +13,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return true;
   },
 
-  // Add a method to get the Electron version
   getElectronVersion: () => process.versions.electron,
 
-  // Add methods for always on top functionality
   toggleAlwaysOnTop: async () => {
     return await ipcRenderer.invoke("toggle-always-on-top");
   },
@@ -25,11 +23,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return await ipcRenderer.invoke("get-always-on-top-state");
   },
 
-  // Add a method to check if we're in development mode
-  isDevelopment: () => {
-    // process.env.NODE_ENV is set by Electron Forge during build
-    // It will be 'production' in production builds and 'development' in dev mode
-    return process.env.NODE_ENV !== "production";
+  // Use IPC to get NODE_ENV from main process
+  isDevelopment: async () => {
+    const nodeEnv = await ipcRenderer.invoke("get-node-env");
+    console.log("NODE_ENV", nodeEnv);
+    return nodeEnv !== "production";
   },
 });
 

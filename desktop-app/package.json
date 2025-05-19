@@ -5,10 +5,11 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc && npm run copy:env",
+    "build:prod": "cross-env NODE_ENV=production npm run build",
     "start": "npm run build && electron .",
-    "copy:env": "copyfiles -f .env.local dist .env",
+    "copy:env": "copyfiles -f .env dist",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dist": "npm run build && electron-builder --dir"
+    "dist": "npm run build:prod && electron-builder --dir"
   },
   "keywords": [],
   "author": "Anderson",
@@ -22,6 +23,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "cross-env": "^7.0.3",
     "dotenv": "^16.5.0",
     "form-data": "^4.0.0"
   },
@@ -38,7 +40,7 @@
       "output": "release/"
     },
     "appId": "com.anderson.audio-listener",
-    "productName": "Audio Transcriber",
+    "productName": "Audio Listener",
     "icon": "src/logo.ico"
   }
 }

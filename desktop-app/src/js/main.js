@@ -96,7 +96,7 @@ function updateConnectionStatus() {
   if (status.connected) {
     statusElement.style.backgroundColor = "#4CAF50";
     statusElement.style.color = "white";
-    statusElement.innerHTML = `Connected (${status.transport})`;
+    statusElement.innerHTML = `Connected`;
   } else {
     statusElement.style.backgroundColor = "#F44336";
     statusElement.style.color = "white";
