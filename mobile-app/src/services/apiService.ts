@@ -12,6 +12,8 @@ if (!API_URL) {
 // For Android emulator, ensure we're using 10.0.2.2 instead of 192.168.x.x
 let effectiveApiUrl = API_URL;
 
+console.log("API_URL", API_URL);
+
 // Special handling for Android emulator
 // Use the API_URL directly, assuming it's correctly configured for the environment
 

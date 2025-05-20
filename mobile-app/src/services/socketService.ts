@@ -1,5 +1,5 @@
 import { io, Socket } from "socket.io-client";
-import { API_URL } from "@env"; // Import from @env
+import { API_URL } from "@env";
 import { Platform } from "react-native";
 
 // Check if API_URL is loaded correctly

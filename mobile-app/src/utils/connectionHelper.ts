@@ -40,9 +40,9 @@ export const checkConnection = async (): Promise<ConnectionResult> => {
     // Try both URLs
     const primaryResult = await tryConnection(API_URL);
 
-    if (primaryResult.success) {
-      return primaryResult;
-    }
+    // if (primaryResult.success) {
+    return primaryResult;
+    // }
 
     // If primary failed, try the alternative URL
     console.log(
@@ -77,11 +77,6 @@ const tryConnection = async (url: string): Promise<ConnectionResult> => {
 
       // Get the raw response text
       const apiResponseText = await apiResponse.text();
-      console.log(
-        `Raw response from API endpoint:`,
-        apiResponseText.substring(0, 100) +
-          (apiResponseText.length > 100 ? "..." : "")
-      );
 
       if (apiResponse.ok) {
         // Try to parse as JSON

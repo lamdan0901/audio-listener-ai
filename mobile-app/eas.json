@@ -12,16 +12,8 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
-    },
-    "local": {
-      "android": {
-        "buildType": "apk"
-      },
-      "distribution": "internal",
-      "env": {
-        "API_URL": "http://192.168.1.10:3033"
-      }
+      "autoIncrement": true,
+      "distribution": "internal"
     }
   },
   "submit": {

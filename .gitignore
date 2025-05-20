@@ -23,6 +23,7 @@ dist-ssr
 *.sw?
 
 .env
+.env.production
 tsconfig.node.tsbuildinfo
 vite.config.d.ts
 server/audio/*

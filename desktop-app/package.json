@@ -7,7 +7,7 @@
     "build": "tsc && npm run copy:env",
     "build:prod": "cross-env NODE_ENV=production npm run build",
     "start": "npm run build && electron .",
-    "copy:env": "copyfiles -f .env dist",
+    "copy:env": "copyfiles -f .env.production dist",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dist": "npm run build:prod && electron-builder --dir"
   },

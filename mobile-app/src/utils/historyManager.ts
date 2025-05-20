@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { HistoryEntry } from "../types/history";
 import { Alert } from "react-native"; // For confirmation dialog
 
+// Ensure consistent key usage
 const HISTORY_KEY = "audioListenerHistory";
 
 /**
@@ -11,6 +12,7 @@ const HISTORY_KEY = "audioListenerHistory";
 export const loadHistory = async (): Promise<HistoryEntry[]> => {
   try {
     const jsonValue = await AsyncStorage.getItem(HISTORY_KEY);
+
     const history = jsonValue != null ? JSON.parse(jsonValue) : [];
     // Ensure data integrity (basic check)
     if (!Array.isArray(history)) {
@@ -19,7 +21,9 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
       return [];
     }
     // Sort by timestamp descending (newest first) just in case
-    return history.sort((a, b) => b.timestamp - a.timestamp);
+    const sortedHistory = history.sort((a, b) => b.timestamp - a.timestamp);
+    console.log(`Loaded ${sortedHistory.length} history entries`);
+    return sortedHistory;
   } catch (e) {
     console.error("Failed to load history:", e);
     // Consider removing corrupted data
@@ -41,14 +45,44 @@ export const saveHistoryEntry = async (
     );
     return false;
   }
+
   try {
-    const currentHistory = await loadHistory();
-    // Add to the beginning
-    const updatedHistory = [entry, ...currentHistory];
-    const jsonValue = JSON.stringify(updatedHistory);
-    await AsyncStorage.setItem(HISTORY_KEY, jsonValue);
-    console.log("History entry saved:", entry.id);
-    return true;
+    // First try to save just this entry as a test
+    const singleEntryTest = JSON.stringify([entry]);
+    try {
+      await AsyncStorage.setItem("historyTest", singleEntryTest);
+      console.log("Single entry test save successful");
+    } catch (testError) {
+      console.error("Single entry test save failed:", testError);
+    }
+
+    // Now try to load and update the full history
+    try {
+      // Try direct set first with a new array
+      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify([entry]));
+      console.log("Successfully saved first history entry");
+      return true;
+    } catch (directError) {
+      console.log(
+        "First direct save attempt failed, trying to load existing history"
+      );
+
+      // Load existing history and append
+      const currentHistory = await loadHistory();
+      const updatedHistory = [entry, ...currentHistory];
+      const jsonValue = JSON.stringify(updatedHistory);
+
+      try {
+        await AsyncStorage.setItem(HISTORY_KEY, jsonValue);
+        console.log(
+          `History entry saved: ${entry.id}. Total entries: ${updatedHistory.length}`
+        );
+        return true;
+      } catch (setError) {
+        console.error("Failed to save history with setItem:", setError);
+        return false;
+      }
+    }
   } catch (e) {
     console.error("Failed to save history entry:", e);
     return false;

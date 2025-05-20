@@ -1,129 +1,228 @@
 import { StyleSheet } from "react-native";
 
+// Theme constants for consistent styling
+export const theme = {
+  colors: {
+    primary: "#007bff",
+    primaryLight: "#81b0ff",
+    secondary: "#6c757d",
+    danger: "#dc3545",
+    success: "#28a745",
+    background: "#f8f9fa",
+    card: "#ffffff",
+    text: "#343a40",
+    textSecondary: "#495057",
+    textMuted: "#6c757d",
+    border: "#ced4da",
+    borderLight: "#e9ecef",
+    disabled: "#adb5bd",
+  },
+  spacing: {
+    xs: 5,
+    sm: 8,
+    md: 10,
+    lg: 15,
+    xl: 20,
+    xxl: 25,
+    section: 20,
+  },
+  radius: {
+    sm: 3,
+    md: 5,
+    lg: 10,
+    circle: 25,
+  },
+  typography: {
+    title: {
+      fontSize: 26,
+      fontWeight: "bold" as const,
+    },
+    heading: {
+      fontSize: 18,
+      fontWeight: "bold" as const,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: "600" as const,
+    },
+    body: {
+      fontSize: 15,
+    },
+    small: {
+      fontSize: 12,
+    },
+  },
+  shadows: {
+    default: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 3,
+    },
+    elevated: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+  },
+  buttons: {
+    primary: {
+      backgroundColor: "#007bff",
+      paddingVertical: 10,
+      paddingHorizontal: 15,
+      borderRadius: 5,
+    },
+    secondary: {
+      backgroundColor: "#6c757d",
+      paddingVertical: 10,
+      paddingHorizontal: 15,
+      borderRadius: 5,
+    },
+    danger: {
+      backgroundColor: "#dc3545",
+      paddingVertical: 10,
+      paddingHorizontal: 15,
+      borderRadius: 5,
+    },
+  },
+};
+
 export const styles = StyleSheet.create({
+  // Layout
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-    paddingTop: 20,
+    backgroundColor: theme.colors.background,
+    paddingTop: 30,
   },
   scrollContent: {
-    padding: 20,
+    padding: theme.spacing.xl,
     paddingBottom: 50,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 25,
-    textAlign: "center",
-    color: "#343a40",
-  },
   section: {
-    marginBottom: 20,
+    marginBottom: theme.spacing.section,
+  },
+
+  // Typography
+  title: {
+    ...theme.typography.title,
+    marginBottom: theme.spacing.xxl,
+    textAlign: "center",
+    color: theme.colors.text,
   },
   label: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: "#495057",
+    ...theme.typography.label,
+    marginBottom: theme.spacing.sm,
+    color: theme.colors.textSecondary,
   },
+  activeText: {
+    fontWeight: "bold",
+    color: theme.colors.primary,
+  },
+  inactiveText: {
+    color: theme.colors.textMuted,
+  },
+  disabledText: {
+    color: theme.colors.disabled,
+  },
+  resultText: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+
+  // Components
   switchContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 5,
-  },
-  activeText: {
-    fontWeight: "bold",
-    color: "#007bff",
-  },
-  inactiveText: {
-    color: "#6c757d",
+    paddingVertical: theme.spacing.xs,
   },
   statusContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 15,
-    marginBottom: 15,
-    backgroundColor: "#e9ecef",
-    borderRadius: 5,
+    paddingVertical: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.borderLight,
+    borderRadius: theme.radius.md,
     minHeight: 50,
   },
   statusText: {
-    fontSize: 16,
-    color: "#495057",
-    marginRight: 5,
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    marginRight: theme.spacing.xs,
   },
   buttonContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-around",
-    marginBottom: 20,
-    gap: 10,
-  },
-  resultText: {
-    fontSize: 15,
-    color: "#212529",
-    padding: 10,
-    backgroundColor: "#fff",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+    marginBottom: theme.spacing.xl,
+    gap: theme.spacing.md,
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: "#ced4da",
-    borderRadius: 4,
-    backgroundColor: "#fff",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.card,
   },
   picker: {
     height: 50,
   },
+
+  // History section
   historyHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: theme.spacing.md,
   },
   historyButtons: {
     flexDirection: "row",
-    gap: 10, // Add gap between buttons
+    gap: theme.spacing.md,
   },
   historyList: {
-    maxHeight: 200, // Limit height to prevent taking too much space
+    maxHeight: 200,
     borderWidth: 1,
-    borderColor: "#e9ecef",
-    borderRadius: 4,
-    backgroundColor: "#fff", // White background for the list
+    borderColor: theme.colors.borderLight,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.card,
   },
   historyItem: {
-    padding: 10,
+    padding: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: theme.colors.borderLight,
   },
   historyQuestion: {
-    fontSize: 14,
-    fontWeight: "500", // Medium weight
+    ...theme.typography.body,
+    fontWeight: "500",
     marginBottom: 3,
   },
   historyTimestamp: {
-    fontSize: 12,
-    color: "#6c757d", // Grey color for timestamp
+    ...theme.typography.small,
+    color: theme.colors.textMuted,
   },
   historyEmptyText: {
     textAlign: "center",
     marginTop: 15,
-    color: "#6c757d",
+    color: theme.colors.textMuted,
     fontStyle: "italic",
   },
-  // Connection status styles
+
+  // Connection status
   connectionStatus: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 12,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    marginBottom: theme.spacing.md,
   },
   connectionStatusTextContainer: {
     flex: 1,
@@ -134,100 +233,185 @@ export const styles = StyleSheet.create({
   },
   connectionStatusSubtext: {
     color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     marginTop: 2,
   },
   retryButton: {
     backgroundColor: "rgba(255, 255, 255, 0.3)",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.md,
   },
   retryButtonText: {
     color: "white",
     fontWeight: "bold",
   },
   reconnectButton: {
-    backgroundColor: "#007bff",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginLeft: 10,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    marginLeft: theme.spacing.md,
   },
   reconnectButtonText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
   },
+
+  // Form elements
   textArea: {
     borderWidth: 1,
-    borderColor: "#ced4da",
-    borderRadius: 4,
-    padding: 10,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
     fontSize: 14,
     textAlignVertical: "top",
-    backgroundColor: "#fff",
+    backgroundColor: theme.colors.card,
     minHeight: 60,
   },
   loader: {
-    marginLeft: 5,
+    marginLeft: theme.spacing.xs,
   },
   loadingText: {
     fontSize: 14,
-    marginLeft: 5,
-    color: "#495057",
+    marginLeft: theme.spacing.xs,
+    color: theme.colors.textSecondary,
   },
-  disabledText: {
-    color: "#adb5bd",
+
+  // Floating action button
+  scrollTopButton: {
+    position: "absolute",
+    bottom: 30,
+    right: 30,
+    backgroundColor: theme.colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.elevated,
+  },
+  scrollTopButtonText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+
+  // Custom button styles
+  customButton: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    justifyContent: "center",
+    alignItems: "center",
+    ...theme.shadows.default,
+  },
+  buttonPrimary: {
+    backgroundColor: theme.colors.primary,
+  },
+  buttonSecondary: {
+    backgroundColor: theme.colors.secondary,
+  },
+  buttonDanger: {
+    backgroundColor: theme.colors.danger,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  // Card styles for consistent elevation and appearance
+  card: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.default,
+  },
+  cardTitle: {
+    ...theme.typography.heading,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+
+  // Form inputs with consistent styling
+  input: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.card,
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  inputFocused: {
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+  },
+  inputLabel: {
+    ...theme.typography.label,
+    marginBottom: theme.spacing.xs,
+    color: theme.colors.textSecondary,
+  },
+  inputError: {
+    borderColor: theme.colors.danger,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: 12,
+    marginTop: theme.spacing.xs,
   },
 });
 
 export const markdownStyles = StyleSheet.create({
   body: {
-    fontSize: 15,
-    color: "#212529",
-    backgroundColor: "#fff",
-    padding: 10,
-    borderRadius: 4,
+    ...theme.typography.body,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.card,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: theme.colors.borderLight,
   },
   heading1: {
     fontSize: 22,
     fontWeight: "bold",
-    marginTop: 10,
-    marginBottom: 5,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
     color: "#0056b3",
   },
   heading2: {
     fontSize: 18,
     fontWeight: "bold",
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
     color: "#0056b3",
   },
-  list_item: { marginBottom: 5 },
-  bullet_list: { marginLeft: 15 },
-  ordered_list: { marginLeft: 15 },
+  list_item: { marginBottom: theme.spacing.xs },
+  bullet_list: { marginLeft: theme.spacing.lg },
+  ordered_list: { marginLeft: theme.spacing.lg },
   code_inline: {
-    backgroundColor: "#e9ecef",
+    backgroundColor: theme.colors.borderLight,
     paddingHorizontal: 4,
     paddingVertical: 2,
-    borderRadius: 3,
+    borderRadius: theme.radius.sm,
     fontFamily: "monospace",
   },
   code_block: {
-    backgroundColor: "#e9ecef",
-    padding: 10,
-    borderRadius: 4,
+    backgroundColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
     fontFamily: "monospace",
-    marginVertical: 5,
+    marginVertical: theme.spacing.xs,
   },
   fence: {
-    backgroundColor: "#e9ecef",
-    padding: 10,
-    borderRadius: 4,
+    backgroundColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
     fontFamily: "monospace",
-    marginVertical: 5,
+    marginVertical: theme.spacing.xs,
   },
 });

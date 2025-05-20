@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # Path to your .env file
-ENV_FILE=".env"
+ENV_FILE=".env.production"
+
+# Get environment from argument, default to production
+EAS_ENVIRONMENT=${1:-production}
 
 # Check if the file exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -23,8 +26,14 @@ do
   key=$(echo "$key" | xargs)
   value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
 
+  # Skip if key is empty after trimming
+  if [ -z "$key" ]; then
+    echo "Skipping empty key."
+    continue
+  fi
+
   echo "Creating secret: $key"
-  eas secret:create --name "$key" --value "$value" --non-interactive
+  eas env:create --name "$key" --value "$value" --non-interactive --scope project --visibility sensitive --environment $EAS_ENVIRONMENT  --force
 
 done < "$ENV_FILE"
 

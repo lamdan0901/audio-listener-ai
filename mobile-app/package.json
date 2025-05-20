@@ -7,16 +7,18 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:android": "sync:env && eas build -p android --profile local",
-    "build:ios": "sync:env && eas build -p ios",
-    "sync:env": "./sync-env-to-eas.sh"
+    "build:android": "npm run sync:env && eas build -p android",
+    "build:ios": "npm run sync:env && eas build -p ios",
+    "sync:env": "bash sync-env-to-eas.sh preview"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",
+    "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-picker/picker": "^2.11.0",
     "@react-navigation/native": "^7.1.7",
     "@react-navigation/native-stack": "^7.3.11",
+    "eas-cli-local-build-plugin": "^1.0.180",
     "expo": "~53.0.6",
     "expo-av": "^15.1.4",
     "expo-file-system": "^18.1.8",
