@@ -9,10 +9,33 @@ import {
 import * as path from "path";
 import * as dotenv from "dotenv";
 
-dotenv.config();
-
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = app.isPackaged ? "production" : "development";
+}
+
+// Load environment variables from .env file
+// IF .env IS COPIED TO THE SAME DIRECTORY AS main.js (e.g., dist/)
+const envPath = path.join(
+  __dirname,
+  process.env.NODE_ENV === "production" ? ".env.production" : ".env"
+);
+
+// dotenv can often read from within ASAR if the path is correct relative to ASAR structure.
+// We skip fs.existsSync because it's unreliable for ASAR paths.
+try {
+  const result = dotenv.config({
+    path: envPath,
+  });
+  if (result.error) {
+    console.warn("dotenv.config error:", result.error);
+  }
+  if (!process.env.API_BASE_URL) {
+    console.warn(
+      ".env file might have been found by path, but API_BASE_URL was not loaded from it or is empty."
+    );
+  }
+} catch (e) {
+  console.error("Error during dotenv.config:", e);
 }
 
 console.log("Main process NODE_ENV:", process.env.NODE_ENV);
