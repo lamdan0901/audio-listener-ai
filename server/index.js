@@ -34,7 +34,7 @@ const io = socketIo(server, {
     threshold: 1024, // Only compress messages larger than 1KB
   },
 });
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3033;
 
 // Set up middleware for parsing request bodies
 app.use(express.json({ limit: "10mb" })); // Increase JSON payload limit for larger audio files
@@ -52,6 +52,7 @@ app.use(
 
 const recordingRoutes = require("./routes/recordingRoutes")();
 const statusRoutes = require("./routes/statusRoutes")();
+const modelRoutes = require("./routes/modelRoutes")();
 
 // Middleware to log Socket.IO polling requests
 app.use("/socket.io", (req, res, next) => {
@@ -64,6 +65,7 @@ app.use("/socket.io", (req, res, next) => {
 // Set up API routes with proper versioning
 app.use("/api/v1/recording", recordingRoutes);
 app.use("/api/v1/status", statusRoutes);
+app.use("/api/v1/models", modelRoutes);
 
 // Root route for health check
 app.get("/", (req, res, next) => {
@@ -79,6 +81,7 @@ app.get("/", (req, res, next) => {
       endpoints: {
         status: "/api/v1/status",
         recording: "/api/v1/recording",
+        models: "/api/v1/models",
       },
     });
   } else {

@@ -22,37 +22,14 @@ async function processUploadedAudio(filePath, params) {
     baseController.setCurrentOutputFile(validatedFilePath);
     baseController.setLastProcessedFile(validatedFilePath);
 
-    // Get reference to the transcription controller
-    const transcriptionController = require("./transcriptionController");
-
-    // Process the audio with the transcription controller
-    const transcriptionOptions = {
-      questionContext: params.questionContext,
-      customContext: params.customContext,
-      isFollowUp: params.isFollowUp,
-    };
-
-    // Process the audio to get the transcript using the validated file
-    const transcriptionResult =
-      await transcriptionController.processTranscription(
-        validatedFilePath,
-        params,
-        transcriptionOptions
-      );
-
-    // If transcription failed or was cancelled, exit early
-    if (transcriptionResult === null) {
-      return false;
-    }
-
     // Get reference to the AI processing controller
     const aiProcessingController = require("./aiProcessingController");
 
-    // Handle the transcription result with the validated file
-    await aiProcessingController.handleTranscriptionResult(
-      transcriptionResult,
-      params,
-      validatedFilePath
+    // NEW LOGIC: Process audio directly with Gemini (bypassing separate transcription)
+    console.log("Using direct Gemini audio processing");
+    await aiProcessingController.processAudioFileWithGemini(
+      validatedFilePath,
+      params
     );
 
     return true;

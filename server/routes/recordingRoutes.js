@@ -5,7 +5,6 @@ const path = require("path");
 const fs = require("fs");
 const {
   recordingController,
-  transcriptionController,
   aiProcessingController,
   processingController,
 } = require("../controllers");
@@ -110,12 +109,13 @@ module.exports = () => {
 
   // Updated stop endpoint - now primarily for legacy support
   router.post("/stop", async (req, res) => {
-    await transcriptionController.stopRecording(req, res);
+    res.status(400).send("Direct audio recording stop is no longer supported.");
   });
 
   // Legacy retry endpoint - for backward compatibility
+  // Redirects to Gemini processing as a "retry"
   router.post("/retry", async (req, res) => {
-    await transcriptionController.retryTranscription(req, res);
+    await aiProcessingController.processWithGemini(req, res);
   });
 
   // New retry endpoint that accepts file uploads
@@ -131,8 +131,8 @@ module.exports = () => {
     // Add the file path to the request body
     req.body.audioFile = req.file.path;
 
-    // Then process with the transcription controller
-    await transcriptionController.retryTranscription(req, res);
+    // Then process with the AI processing controller
+    await aiProcessingController.processWithGemini(req, res);
   });
 
   // Legacy Gemini endpoint - for backward compatibility

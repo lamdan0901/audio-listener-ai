@@ -155,6 +155,16 @@ document.addEventListener("DOMContentLoaded", function () {
     window.streamedContent = "";
   }
 
+  // Initialize history manager
+  if (window.initHistoryManager) {
+    window.initHistoryManager();
+  }
+
+  // Initialize model selector
+  if (window.initModelSelector) {
+    window.initModelSelector();
+  }
+
   // Set up always on top button
   const alwaysOnTopBtn = document.getElementById("alwaysOnTopBtn");
   if (alwaysOnTopBtn) {

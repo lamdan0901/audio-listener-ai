@@ -126,6 +126,9 @@ async function toggleRecording() {
       formData.append("questionContext", questionContext);
       formData.append("customContext", customContext);
       formData.append("isFollowUp", isFollowUp);
+      // Get the selected model
+      const model = window.getSelectedModel ? window.getSelectedModel() : null;
+      if (model) formData.append("model", model);
 
       const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 
@@ -387,165 +390,6 @@ function handleStreamError(errorMessage) {
   ).innerHTML = `<strong style="color: red;">Error:</strong> ${errorMessage}`;
 }
 
-// --- End Helper Functions ---
-
-/**
- * Tests the response display functionality with a mock response.
- * This function bypasses the audio recording and server communication,
- * directly displaying a test response in the UI.
- */
-function testResponseDisplay() {
-  console.log("Testing response display functionality");
-
-  // Create a mock transcript
-  const mockTranscript = "How to fetch data with react hooks";
-
-  // Create a mock response
-  const mockResponse = `
-# Fetching Data with React Hooks
-
-React Hooks provide a clean and efficient way to fetch data in functional components. Here's how to use them:
-
-## Using useState and useEffect
-
-The most common pattern combines useState to store the data and useEffect to fetch it:
-
-\`\`\`jsx
-import React, { useState, useEffect } from 'react';
-
-function DataFetchingComponent() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('https://api.example.com/data');
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const result = await response.json();
-        setData(result);
-        setError(null);
-      } catch (err) {
-        setError(err.message);
-        setData(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []); // Empty dependency array means this effect runs once on mount
-
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
-
-  return (
-    <div>
-      {/* Render your data here */}
-      <pre>{JSON.stringify(data, null, 2)}</pre>
-    </div>
-  );
-}
-\`\`\`
-
-## Creating a Custom Hook
-
-For reusability, you can create a custom hook:
-
-\`\`\`jsx
-function useFetch(url) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const result = await response.json();
-
-        if (isMounted) {
-          setData(result);
-          setError(null);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err.message);
-          setData(null);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [url]);
-
-  return { data, loading, error };
-}
-\`\`\`
-
-Then use it in your components:
-
-\`\`\`jsx
-function UserProfile({ userId }) {
-  const { data, loading, error } = useFetch(\`https://api.example.com/users/\${userId}\`);
-
-  // Rest of component...
-}
-\`\`\`
-
-## Using SWR or React Query
-
-For more advanced data fetching, consider libraries like SWR or React Query which handle caching, revalidation, and other complex scenarios.
-`;
-
-  // Display the mock transcript
-  const questionElement = document.getElementById("question");
-  if (questionElement) {
-    questionElement.innerHTML = `<strong>Question:</strong> ${mockTranscript}`;
-  }
-
-  // Use our direct response display function to show the mock response
-  window.socketClient.displayDirectResponse(mockResponse);
-
-  // Update UI state
-  const status = document.getElementById("status");
-  if (status) {
-    status.className = "status idle";
-    status.textContent = "Status: Idle (Test Mode)";
-  }
-
-  const loading = document.getElementById("loading");
-  if (loading) {
-    loading.style.display = "none";
-  }
-
-  // Enable buttons
-  document.getElementById("retryBtn").disabled = false;
-  document.getElementById("geminiBtn").disabled = false;
-  document.getElementById("toggleBtn").disabled = false;
-  document.getElementById("cancelBtn").disabled = true;
-
-  console.log("Test response displayed successfully");
-}
-
 /**
  * Retries transcription of the last recorded audio file with potentially different settings.
  * Resets UI, disables relevant buttons, and sends a retry request to the server.
@@ -778,6 +622,8 @@ async function retryTranscription() {
   // get the isFollowUp checkbox state
   const followUpCheckbox = document.getElementById("isFollowUpCheckbox");
   const isFollowUp = followUpCheckbox ? followUpCheckbox.checked : false;
+  // get the selected model
+  const model = window.getSelectedModel ? window.getSelectedModel() : null;
 
   // Reset cancellation flag
   window.isCancelled = false;
@@ -816,6 +662,7 @@ async function retryTranscription() {
     formData.append("customContext", customContext);
     formData.append("isFollowUp", isFollowUp);
     formData.append("isRetry", "true"); // Flag this as a retry attempt
+    if (model) formData.append("model", model);
 
     const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 
@@ -937,6 +784,7 @@ async function processWithGemini() {
     formData.append("customContext", customContext);
     formData.append("isFollowUp", isFollowUp);
     formData.append("useGemini", "true"); // Flag to use Gemini processing
+    if (model) formData.append("model", model);
 
     const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 

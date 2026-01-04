@@ -3,25 +3,11 @@
  * This is a generic, reusable component that could be used in multiple projects
  */
 
-const { AssemblyAI } = require("assemblyai");
 const {
   GoogleGenerativeAI,
   HarmCategory,
   HarmBlockThreshold,
 } = require("@google/generative-ai");
-
-/**
- * Initialize and configure AssemblyAI client
- * @returns {AssemblyAI} - Configured AssemblyAI client
- */
-function createSpeechClient() {
-  if (!process.env.ASSEMBLY_AI_API_KEY) {
-    throw new Error("API key is required for AssemblyAI");
-  }
-  return new AssemblyAI({
-    apiKey: process.env.ASSEMBLY_AI_API_KEY,
-  });
-}
 
 /**
  * Initialize and configure Google Generative AI client
@@ -39,17 +25,29 @@ function createGenAIClient(apiKey) {
  * Get a configured Gemini model with appropriate safety settings
  * @param {GoogleGenerativeAI} genAI - The Google Generative AI client
  * @param {Object} config - Configuration options
- * @param {string} config.modelName - Name of the model to use
- * @param {boolean} config.withSafetySettings - Whether to include safety settings
+ * @param {string} [config.modelName] - Optional name of the model to use
+ * @param {boolean} [config.withSafetySettings] - Whether to include safety settings
  * @returns {Object} - Configured Gemini model instance
  */
 function getGeminiModel(genAI, config = {}) {
-  const {
-    modelName = "gemini-2.5-flash-preview-04-17",
-    withSafetySettings = false,
-  } = config;
+  const { modelName, withSafetySettings = false } = config;
 
-  const modelConfig = { model: modelName };
+  // Allow callers to pass null/undefined/empty modelName and still get the default
+  const effectiveModelName =
+    typeof modelName === "string" && modelName.trim().length > 0
+      ? modelName
+      : "gemini-3-flash-preview";
+
+  const modelConfig = {
+    model: effectiveModelName,
+    generationConfig: {
+      // Options: "minimal", "low", "medium", "high"
+      thinkingConfig: {
+        thinkingLevel: "minimal", // Use this to effectively disable reasoning
+        includeThoughts: false, // Set to true if you want to see the reasoning text
+      },
+    },
+  };
 
   if (withSafetySettings) {
     modelConfig.safetySettings = [
@@ -64,7 +62,6 @@ function getGeminiModel(genAI, config = {}) {
 }
 
 module.exports = {
-  createSpeechClient,
   createGenAIClient,
   getGeminiModel,
 };

@@ -23,6 +23,7 @@ function prepareRequestParams(reqBody) {
     isFollowUp: reqBody.isFollowUp === true,
     useStreaming: reqBody.useStreaming !== false, // Default to true
     audioFile: reqBody.audioFile || null,
+    model: reqBody.model || null,
   };
 }
 

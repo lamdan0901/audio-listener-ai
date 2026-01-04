@@ -1,9 +1,19 @@
 const { tryCatch } = require("../lib/tryCatch");
-const { transcribeAudio, processAudioGeneric } = require("./audio-processor");
+const { processAudioGeneric } = require("./audio-processor");
 const { createGenAIClient, getGeminiModel } = require("../lib/ai-client");
 
 // Initialize Google AI client
-const genAI = createGenAIClient(process.env.GEMINI_API_KEY);
+let genAI;
+try {
+  genAI = createGenAIClient(process.env.GEMINI_API_KEY);
+  console.log("Google Generative AI client initialized successfully");
+} catch (error) {
+  console.error(
+    "Failed to initialize Google Generative AI client:",
+    error.message
+  );
+  // We'll handle this error when AI features are used
+}
 
 /**
  * Gets context-specific prompt text based on the question context
@@ -99,8 +109,16 @@ function buildPrompt(
  * @param {boolean} withSafetySettings - Whether to include safety settings
  * @returns {Object} - Configured Gemini model instance
  */
-function getConfiguredGeminiModel(withSafetySettings = false) {
-  return getGeminiModel(genAI, { withSafetySettings });
+function getConfiguredGeminiModel(
+  withSafetySettings = false,
+  modelName = null
+) {
+  if (!genAI) {
+    throw new Error(
+      "Google Generative AI client is not initialized. Check your API key."
+    );
+  }
+  return getGeminiModel(genAI, { withSafetySettings, modelName });
 }
 
 /**
@@ -110,9 +128,10 @@ async function generateAnswer(
   question,
   lang,
   questionContext = "general",
-  previousQuestion = null
+  previousQuestion = null,
+  modelName = null
 ) {
-  const model = getConfiguredGeminiModel();
+  const model = getConfiguredGeminiModel(false, modelName);
   const contextPrompt = getContextPrompt(questionContext);
   const prompt = buildPrompt(question, lang, contextPrompt, previousQuestion);
 
@@ -134,9 +153,10 @@ async function* streamGeneratedAnswer(
   lang,
   questionContext = "general",
   previousQuestion = null,
-  customContext = ""
+  customContext = "",
+  modelName = null
 ) {
-  const model = getConfiguredGeminiModel();
+  const model = getConfiguredGeminiModel(false, modelName);
   const contextPrompt = getContextPrompt(questionContext);
   const prompt = buildPrompt(
     question,
@@ -162,13 +182,14 @@ async function processAudioWithGemini(
   filePath,
   lang = "en",
   questionContext = "general",
-  customContext = ""
+  customContext = "",
+  modelName = null
 ) {
   return processAudioGeneric(filePath, async (audioBase64) => {
     console.log(`Processing audio directly with Gemini: ${filePath}`);
 
     // Get the appropriate model with safety settings
-    const model = getConfiguredGeminiModel(true);
+    const model = getConfiguredGeminiModel(true, modelName);
 
     // Create parts array with the audio content
     const parts = [
@@ -192,7 +213,7 @@ async function processAudioWithGemini(
     // Add prompt text based on language
     let promptText = "";
     if (lang === "vi") {
-      promptText = `Đây là nội dung âm thanh. ${contextPrompt} ${userCustomContext}
+      promptText = `Đây là nội dung âm thanh. ${contextPrompt} ${userCustomContext}. Nội dung này có thể chứa nhiều thuật ngữ, từ khóa chuyên ngành bằng tiếng anh lẫn tiếng việt, vậy nên hãy lắng nghe và phân biệt cẩn thận. Hãy trả lời bằng tiếng việt nhưng các thuật ngữ cần thì vẫn giữ lại bằng tiếng anh. Nếu có thuật ngữ tiếng anh, hãy giữ nguyên và không dịch thành tiếng việt.
       QUAN TRỌNG: Nếu có nhiều câu hỏi trong đoạn âm thanh, bạn PHẢI trả lời tất cả các câu hỏi theo thứ tự. Bạn PHẢI nêu rõ từng câu hỏi bằng cách viết "Câu hỏi 1: [nội dung câu hỏi]" trước khi trả lời. Nếu có nhiều câu hỏi, bạn phải liệt kê chúng theo định dạng "Câu hỏi 1: ...", "Câu hỏi 2: ...", v.v.
       Sử dụng định dạng Markdown cho câu trả lời của bạn.`;
       parts.push({ text: promptText });
@@ -204,6 +225,7 @@ async function processAudioWithGemini(
     }
 
     console.log("Sending audio to Gemini for direct processing");
+
     const result = await model.generateContent({
       contents: [{ role: "user", parts }],
     });
@@ -282,7 +304,6 @@ async function processAudioWithGemini(
 }
 
 module.exports = {
-  transcribeAudio,
   generateAnswer,
   streamGeneratedAnswer,
   processAudioWithGemini,

@@ -9,100 +9,6 @@ const { tryCatch } = require("../lib/tryCatch");
 const backendEvents = require("../lib/events");
 
 /**
- * Handles sending updates to client based on transcription result
- * @param {Object} io - Socket.io instance
- * @param {string} transcript - Transcription result
- * @param {Object} params - Processing parameters
- * @param {string} fileToProcess - Audio file path
- * @returns {Promise<void>}
- */
-async function handleTranscriptionResult(transcript, params, fileToProcess) {
-  // Check if we should continue
-  if (baseController.isProcessingCancelled()) {
-    console.log("Processing was cancelled during transcription");
-    return;
-  }
-
-  if (!transcript || transcript.trim() === "") {
-    console.log("Empty transcript detected in handleTranscriptionResult");
-
-    // Handle empty transcript result
-    const emptyResult = baseController.handleEmptyTranscript(
-      params.languageCode,
-      fileToProcess
-    );
-
-    if (!baseController.isProcessingCancelled()) {
-      // First emit a transcript event with empty string so the client knows what happened
-      backendEvents.emit("transcript", { transcript: "" });
-
-      // Then emit the update with the apology message
-      backendEvents.emit("update", emptyResult);
-
-      // Also emit a streamEnd event to ensure the client UI is properly updated
-      backendEvents.emit("streamEnd", {
-        fullAnswer: emptyResult.answer,
-        transcript: "",
-        audioFile: fileToProcess,
-        emptyTranscript: true,
-      });
-    }
-
-    // Return early since we can't process an empty transcript
-    return;
-  } else if (params.useStreaming) {
-    // Stream the response option
-    backendEvents.emit("transcript", { transcript });
-
-    // Handle follow-up logic
-    baseController.handleFollowUpLogic(params.isFollowUp, transcript);
-
-    // Start streaming in the background with follow-up context if needed
-    const streamOptions = {
-      isFollowUp: params.isFollowUp,
-      customContext: params.customContext,
-    };
-
-    streamResponseToClient(
-      transcript,
-      params.lang,
-      params.questionContext,
-      fileToProcess,
-      streamOptions
-    ).catch((error) => {
-      console.error("Error in streaming background task:", error);
-      if (!baseController.isProcessingCancelled()) {
-        backendEvents.emit("streamError", { error: error.message });
-      }
-    });
-  } else {
-    // Handle follow-up logic and get context question
-    const contextQuestion = baseController.handleFollowUpLogic(
-      params.isFollowUp,
-      transcript
-    );
-
-    // Use the traditional approach
-    const answer = await generateAnswer(
-      transcript,
-      params.lang,
-      params.questionContext,
-      contextQuestion
-    );
-
-    // Only emit the update if processing wasn't cancelled
-    if (!baseController.isProcessingCancelled()) {
-      backendEvents.emit("update", {
-        transcript,
-        answer,
-        audioFile: fileToProcess,
-        isFollowUp: params.isFollowUp,
-      });
-    }
-  }
-}
-
-/**
  * Process audio directly with Gemini (bypassing Speech-to-Text)
  * @param {string} filePath - Path to audio file
  * @param {string} lang - Language code
@@ -114,7 +20,8 @@ async function processAudioDirectlyWithGemini(
   filePath,
   lang = "en",
   questionContext = "general",
-  customContext = ""
+  customContext = "",
+  modelName = null
 ) {
   console.log(`Processing audio directly with Gemini: ${filePath}`);
 
@@ -125,7 +32,13 @@ async function processAudioDirectlyWithGemini(
   }
 
   const result = await tryCatch(
-    processAudioWithGemini(filePath, lang, questionContext, customContext)
+    processAudioWithGemini(
+      filePath,
+      lang,
+      questionContext,
+      customContext,
+      modelName
+    )
   );
 
   if (result.error) {
@@ -163,7 +76,8 @@ async function streamResponseToClient(
   lang,
   questionContext,
   audioFile,
-  streamOptions = {}
+  streamOptions = {},
+  modelName = null
 ) {
   console.log("Starting streaming response generation");
 
@@ -175,7 +89,8 @@ async function streamResponseToClient(
         lang,
         questionContext,
         streamOptions.isFollowUp ? baseController.getLastQuestion() : null,
-        streamOptions.customContext || ""
+        streamOptions.customContext || "",
+        modelName
       );
 
       // Accumulate content to show complete answer at the end
@@ -226,6 +141,75 @@ async function streamResponseToClient(
 
 // Controller methods
 const aiProcessingController = {
+  // Process audio file with Gemini Logic
+  processAudioFileWithGemini: async (fileToProcess, params) => {
+    // Reset retry count when switching to Gemini
+    baseController.setRetryCount(0);
+
+    // Inform client we're processing
+    backendEvents.emit("processing");
+
+    // Process audio directly with Gemini
+    const result = await processAudioDirectlyWithGemini(
+      fileToProcess,
+      params.lang,
+      params.questionContext,
+      params.customContext,
+      params.model
+    );
+
+    // Add follow-up flag to the result
+    if (result && !baseController.isProcessingCancelled()) {
+      result.isFollowUp = params.isFollowUp;
+    }
+
+    // Handle follow-up logic
+    if (!params.isFollowUp && result && result.transcript) {
+      baseController.setLastQuestion(result.transcript);
+      console.log(
+        `Storing new question from Gemini: ${baseController.getLastQuestion()}`
+      );
+    }
+
+    // Only continue if we have results and processing wasn't cancelled
+    if (result && !baseController.isProcessingCancelled()) {
+      // If streaming is enabled and we have a transcript, stream the answer
+      if (params.useStreaming && result.transcript) {
+        // Emit the transcript first
+        backendEvents.emit("transcript", {
+          transcript: result.transcript,
+          processedWithGemini: true,
+        });
+
+        // Start streaming in the background
+        const streamOptions = {
+          isFollowUp: params.isFollowUp,
+          customContext: params.questionContext,
+          processedWithGemini: true,
+        };
+
+        streamResponseToClient(
+          result.transcript,
+          params.lang,
+          params.questionContext,
+          fileToProcess,
+          streamOptions,
+          params.model
+        ).catch((error) => {
+          console.error("Error in streaming background task:", error);
+          if (!baseController.isProcessingCancelled()) {
+            backendEvents.emit("streamError", { error: error.message });
+          }
+        });
+      } else {
+        // Use the traditional approach (non-streaming)
+        backendEvents.emit("update", result);
+      }
+    }
+
+    return true;
+  },
+
   // Process audio with Gemini AI directly
   processWithGemini: async (req, res) => {
     // Parse and prepare request parameters
@@ -252,71 +236,7 @@ const aiProcessingController = {
     }
 
     const processingResult = await tryCatch(
-      (async () => {
-        // Reset retry count when switching to Gemini
-        baseController.setRetryCount(0);
-
-        // Inform client we're processing
-        backendEvents.emit("processing");
-
-        // Process audio directly with Gemini
-        const result = await processAudioDirectlyWithGemini(
-          fileToProcess,
-          params.lang,
-          params.questionContext,
-          params.customContext
-        );
-
-        // Add follow-up flag to the result
-        if (result && !baseController.isProcessingCancelled()) {
-          result.isFollowUp = params.isFollowUp;
-        }
-
-        // Handle follow-up logic
-        if (!params.isFollowUp && result && result.transcript) {
-          baseController.setLastQuestion(result.transcript);
-          console.log(
-            `Storing new question from Gemini: ${baseController.getLastQuestion()}`
-          );
-        }
-
-        // Only continue if we have results and processing wasn't cancelled
-        if (result && !baseController.isProcessingCancelled()) {
-          // If streaming is enabled and we have a transcript, stream the answer
-          if (params.useStreaming && result.transcript) {
-            // Emit the transcript first
-            backendEvents.emit("transcript", {
-              transcript: result.transcript,
-              processedWithGemini: true,
-            });
-
-            // Start streaming in the background
-            const streamOptions = {
-              isFollowUp: params.isFollowUp,
-              customContext: params.questionContext,
-              processedWithGemini: true,
-            };
-
-            streamResponseToClient(
-              result.transcript,
-              params.lang,
-              params.questionContext,
-              fileToProcess,
-              streamOptions
-            ).catch((error) => {
-              console.error("Error in streaming background task:", error);
-              if (!baseController.isProcessingCancelled()) {
-                backendEvents.emit("streamError", { error: error.message });
-              }
-            });
-          } else {
-            // Use the traditional approach (non-streaming)
-            backendEvents.emit("update", result);
-          }
-        }
-
-        return true;
-      })()
+      aiProcessingController.processAudioFileWithGemini(fileToProcess, params)
     );
 
     if (processingResult.error) {
@@ -356,7 +276,9 @@ const aiProcessingController = {
         transcript,
         params.lang,
         params.questionContext,
-        audioFile
+        audioFile,
+        {},
+        params.model
       )
     );
 
@@ -377,7 +299,6 @@ const aiProcessingController = {
 
 // Export the module
 module.exports = {
-  handleTranscriptionResult,
   processAudioDirectlyWithGemini,
   streamResponseToClient,
   ...aiProcessingController,

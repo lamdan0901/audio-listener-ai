@@ -63,6 +63,18 @@ button {
   margin-left: 5px;
 }
 
+#model-selection-container {
+  margin-bottom: 1em;
+}
+
+#model-selection-container select {
+  padding: 6px;
+  font-size: 16px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  margin-left: 5px;
+}
+
 /* Audio source and device selection styling */
 #audio-source-selection {
   margin-bottom: 10px;
