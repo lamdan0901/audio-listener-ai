@@ -29,13 +29,16 @@ async function processUploadedAudio(filePath, params) {
     console.log("Using direct Gemini audio processing");
     await aiProcessingController.processAudioFileWithGemini(
       validatedFilePath,
-      params
+      params,
     );
 
     return true;
   } catch (error) {
     console.error("Error processing uploaded audio:", error);
-    backendEvents.emit("error", `Error processing audio: ${error.message}`);
+    backendEvents.emit(
+      "processingError",
+      `Error processing audio: ${error.message}`,
+    );
     return false;
   }
 }
@@ -89,22 +92,22 @@ const recordingController = {
     try {
       // Process the uploaded audio
       const processingResult = await tryCatch(
-        processUploadedAudio(uploadedFilePath, params)
+        processUploadedAudio(uploadedFilePath, params),
       );
 
       if (processingResult.error) {
         console.error(
           "Error processing uploaded audio:",
-          processingResult.error
+          processingResult.error,
         );
         const errorResult = baseController.handleProcessingError(
           processingResult.error,
           params.lang,
-          uploadedFilePath
+          uploadedFilePath,
         );
 
         if (!baseController.isProcessingCancelled()) {
-          backendEvents.emit("error", errorResult.error);
+          backendEvents.emit("processingError", errorResult.error);
           backendEvents.emit("update", errorResult);
         }
 
@@ -128,7 +131,10 @@ const recordingController = {
       });
     } catch (error) {
       console.error("Unexpected error in handleAudioUpload:", error);
-      backendEvents.emit("error", `Unexpected error: ${error.message}`);
+      backendEvents.emit(
+        "processingError",
+        `Unexpected error: ${error.message}`,
+      );
 
       return res.status(500).json({
         success: false,
@@ -141,12 +147,12 @@ const recordingController = {
   // Now just returns a message that clients should use the upload endpoint
   startRecording: (_req, res) => {
     console.log(
-      "startRecording endpoint called - informing client to use upload endpoint"
+      "startRecording endpoint called - informing client to use upload endpoint",
     );
     res
       .status(400)
       .send(
-        "Direct audio recording is no longer supported. Please upload audio files to the /upload endpoint instead."
+        "Direct audio recording is no longer supported. Please upload audio files to the /upload endpoint instead.",
       );
   },
 

@@ -63,21 +63,24 @@ function connectGlobalSocket(url) {
     globalSocket.on("streamChunk", function (data) {
       // Append the chunk to the answer
       if (data && data.chunk) {
-        var answerElement = document.getElementById("answer");
+        var answerElement = document.getElementById("answer-selected-panel");
         if (answerElement) {
           // Create or update the answer content
           var contentElement = document.getElementById("global-answer-content");
           if (!contentElement) {
-            answerElement.innerHTML =
-              "<strong>Answer:</strong><div id='global-answer-content'></div>";
-            contentElement = document.getElementById("global-answer-content");
+            // Only inject if socket-client.js hasn't already set up livePreview
+            if (!document.getElementById("livePreview")) {
+              answerElement.innerHTML =
+                "<strong>Answer:</strong><div id='global-answer-content'></div>";
+              contentElement = document.getElementById("global-answer-content");
+            }
           }
 
           if (contentElement) {
             // Append the chunk and render as markdown using our utility if available
             if (typeof window.markdownUtils !== "undefined") {
               contentElement.innerHTML += window.markdownUtils.parseMarkdown(
-                data.chunk
+                data.chunk,
               );
             } else {
               contentElement.innerHTML += marked.parse(data.chunk);
@@ -94,7 +97,7 @@ function connectGlobalSocket(url) {
         // Use our markdown utility if available
         if (typeof window.markdownUtils !== "undefined") {
           contentElement.innerHTML = window.markdownUtils.parseMarkdown(
-            contentElement.innerHTML
+            contentElement.innerHTML,
           );
         } else {
           contentElement.innerHTML = marked.parse(contentElement.innerHTML);
@@ -166,7 +169,7 @@ setTimeout(function () {
   } else {
     console.error("Socket.IO is not available globally");
     alert(
-      "Socket.IO is not available globally. The application may not function correctly."
+      "Socket.IO is not available globally. The application may not function correctly.",
     );
   }
 }, 2000);

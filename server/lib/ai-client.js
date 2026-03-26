@@ -22,6 +22,12 @@ function createGenAIClient(apiKey) {
 }
 
 /**
+ * The default Gemini model used when no model is specified.
+ * This is the backup model used for parallel dual-model calls.
+ */
+const DEFAULT_MODEL_NAME = process.env.DEFAULT_MODEL || "gemini-2.5-flash-lite";
+
+/**
  * Get a configured Gemini model with appropriate safety settings
  * @param {GoogleGenerativeAI} genAI - The Google Generative AI client
  * @param {Object} config - Configuration options
@@ -36,17 +42,17 @@ function getGeminiModel(genAI, config = {}) {
   const effectiveModelName =
     typeof modelName === "string" && modelName.trim().length > 0
       ? modelName
-      : "gemini-3-flash-preview";
+      : DEFAULT_MODEL_NAME;
 
   const modelConfig = {
     model: effectiveModelName,
-    generationConfig: {
-      // Options: "minimal", "low", "medium", "high"
-      thinkingConfig: {
-        thinkingLevel: "minimal", // Use this to effectively disable reasoning
-        includeThoughts: false, // Set to true if you want to see the reasoning text
-      },
-    },
+    // generationConfig: {
+    //   // Options: "minimal", "low", "medium", "high"
+    //   thinkingConfig: {
+    //     thinkingLevel: "minimal", // Use this to effectively disable reasoning
+    //     includeThoughts: false, // Set to true if you want to see the reasoning text
+    //   },
+    // },
   };
 
   if (withSafetySettings) {
@@ -64,4 +70,5 @@ function getGeminiModel(genAI, config = {}) {
 module.exports = {
   createGenAIClient,
   getGeminiModel,
+  DEFAULT_MODEL_NAME,
 };

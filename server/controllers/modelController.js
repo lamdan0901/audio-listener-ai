@@ -17,7 +17,7 @@ const modelController = {
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
       );
 
       if (!response.ok) {
@@ -35,6 +35,15 @@ const modelController = {
 
         // Check if model name includes "Gemini" (case-insensitive)
         if (!model.name.toLowerCase().includes("gemini")) {
+          return false;
+        }
+
+        // Exclude models with "Nano" in their name or display name
+        const displayName = (model.displayName || "").toLowerCase();
+        if (
+          model.name.toLowerCase().includes("nano") ||
+          displayName.includes("nano")
+        ) {
           return false;
         }
 
