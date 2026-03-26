@@ -64,11 +64,11 @@ async function initializeSocket(serverUrl) {
       // Check if marked library is available
       if (typeof marked === "undefined") {
         console.warn(
-          "Marked library is not loaded. Some formatting may not work correctly."
+          "Marked library is not loaded. Some formatting may not work correctly.",
         );
         addDebugLog(
           "Marked library is not loaded. Some formatting may not work correctly.",
-          "warning"
+          "warning",
         );
       } else {
         console.log("Marked library is loaded");
@@ -109,7 +109,7 @@ async function initializeSocket(serverUrl) {
       socket.on("connect", () => {
         console.log(
           "%c Socket.IO CONNECTED: " + socket.id,
-          "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 2px;"
+          "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 2px;",
         );
         console.log("Socket transport type:", socket.io.engine.transport.name);
         console.log("Socket protocol:", socket.io.engine.transport.protocol);
@@ -178,7 +178,7 @@ async function initializeSocket(serverUrl) {
       socket.on("connect_error", (error) => {
         console.error(
           "%c Socket.IO CONNECTION ERROR: " + error,
-          "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;"
+          "background: #F44336; color: white; padding: 2px 6px; border-radius: 2px;",
         );
         console.error("Error details:", error);
 
@@ -244,13 +244,13 @@ async function initializeSocket(serverUrl) {
       socket.on("disconnect", (reason) => {
         console.log(
           "%c Socket.IO DISCONNECTED: " + reason,
-          "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;"
+          "background: #FF9800; color: white; padding: 2px 6px; border-radius: 2px;",
         );
 
         isDevEnvironment().then((isDev) => {
           if (isDev) {
             const debugContent = document.getElementById(
-              "socket-debug-content"
+              "socket-debug-content",
             );
             if (debugContent) {
               // Update just the content part, preserving the header and toggle functionality
@@ -321,14 +321,14 @@ async function initializeSocket(serverUrl) {
       socket.onAny((eventName, ...args) => {
         console.log(
           `%c Socket.IO EVENT RECEIVED: ${eventName}`,
-          "background: #2196F3; color: white; padding: 2px 6px; border-radius: 2px;"
+          "background: #2196F3; color: white; padding: 2px 6px; border-radius: 2px;",
         );
         console.log("Event data:", ...args);
 
         isDevEnvironment().then((isDev) => {
           if (isDev) {
             const debugContent = document.getElementById(
-              "socket-debug-content"
+              "socket-debug-content",
             );
             if (debugContent) {
               const eventData =
@@ -382,7 +382,8 @@ function setupSocketEventHandlers() {
 
   // Processing event
   socket.on("processing", () => {
-    if (window.isCancelled) return;
+    // A new processing operation is starting — always reset the cancelled flag
+    window.isCancelled = false;
 
     // Reset loading message to default
     const loading = document.getElementById("loading");
@@ -397,7 +398,21 @@ function setupSocketEventHandlers() {
 
     // Clear previous results
     document.getElementById("question").innerHTML = "";
-    document.getElementById("answer").innerHTML = "";
+    document.getElementById("answer-selected-panel").innerHTML = "";
+    document.getElementById("answer-backup-panel").innerHTML = "";
+    window.backupStreamedContent = "";
+
+    // Hide dual-model tabs and reset active state
+    const answerTabs = document.getElementById("answer-tabs");
+    if (answerTabs) answerTabs.style.display = "none";
+    const tabSel = document.getElementById("tab-selected");
+    const tabDef = document.getElementById("tab-default");
+    if (tabSel) tabSel.classList.add("active");
+    if (tabDef) tabDef.classList.remove("active");
+    const backupPanel = document.getElementById("answer-backup-panel");
+    if (backupPanel) backupPanel.style.display = "none";
+    const selectedPanel = document.getElementById("answer-selected-panel");
+    if (selectedPanel) selectedPanel.style.display = "";
 
     // Disable buttons during processing
     document.getElementById("retryBtn").disabled = true;
@@ -406,17 +421,19 @@ function setupSocketEventHandlers() {
     document.getElementById("cancelBtn").disabled = false;
   });
 
-  // Transcript event
-  socket.on("transcript", (data) => {
-    if (window.isCancelled) return;
+  // Answer received — show question, answer, set up tabs, save history
+  socket.on("update", (data) => {
+    if (window.isCancelled) {
+      window.isCancelled = false;
+      return;
+    }
 
-    console.log("Received transcript via Socket.IO:", data);
-    addDebugLog(`Received transcript: ${data.transcript}`, "success");
+    console.log("Received update via Socket.IO:", data);
+    addDebugLog("Received answer update", "success");
 
-    // Save the original question for potential Gemini processing
+    // Save the original question for potential future use
     if (!data.processedWithGemini) {
       window.originalQuestion = data.transcript;
-      addDebugLog(`Saved original question: ${data.transcript}`);
     }
 
     // Use the original question if this is a Gemini processed result
@@ -427,327 +444,102 @@ function setupSocketEventHandlers() {
 
     // Format question for display - handle multiple questions
     let formattedQuestion = displayQuestion;
-    if (displayQuestion.includes(" | ")) {
-      // We have multiple questions, format them as a list
+    if (displayQuestion && displayQuestion.includes(" | ")) {
       const questions = displayQuestion.split(" | ");
       formattedQuestion = questions
         .map((q, i) => `${i + 1}. ${q}`)
         .join("<br>");
     }
 
-    // Only update the question display if there's actual content
     if (formattedQuestion && formattedQuestion.trim()) {
-      document.getElementById(
-        "question"
-      ).innerHTML = `<strong>Question:</strong> ${formattedQuestion}`;
+      document.getElementById("question").innerHTML =
+        `<strong>Question:</strong> ${formattedQuestion}`;
     }
 
-    let debugInfoHtml = "";
-    isDevEnvironment().then((isDev) => {
-      if (isDev) {
-        debugInfoHtml = `
-          <div style="background-color: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc; font-family: monospace; font-size: 12px;">
-            <strong>Debug Info:</strong><br>
-            Transcript received: ${data.transcript}<br>
-            Socket.IO connected: ${socket.connected}<br>
-            Current time: ${new Date().toLocaleTimeString()}<br>
-          </div>
+    // Show dual-model tabs if the server indicates a second model is running
+    if (data.backupModel) {
+      window.backupModelName = data.backupModel;
+      const tabs = document.getElementById("answer-tabs");
+      if (tabs) tabs.style.display = "flex";
+      const tabSelBtn = document.getElementById("tab-selected");
+      const tabDefBtn = document.getElementById("tab-default");
+      const getLabel =
+        window.getModelDisplayName ||
+        ((id) => (id || "").split("/").pop() || id);
+      const shortModel1 = getLabel(data.selectedModel) || "Model 1";
+      const shortModel2 = getLabel(data.backupModel) || "Model 2";
+      if (tabSelBtn) tabSelBtn.textContent = shortModel1;
+      if (tabDefBtn) tabDefBtn.textContent = shortModel2;
+
+      const backupPanelPre = document.getElementById("answer-backup-panel");
+      if (backupPanelPre) {
+        backupPanelPre.style.display = "none";
+        backupPanelPre.innerHTML = `
+          <strong>Answer (${shortModel2}):</strong>
+          <div id="backupLivePreview">Waiting for response...</div>
         `;
       }
-    });
-
-    // Prepare for answer streaming with debug info if in development mode
-    const answerElement = document.getElementById("answer");
-    if (answerElement) {
-      answerElement.innerHTML = `
-        <strong>Answer:</strong>
-        ${debugInfoHtml}
-        <div id="livePreview">Waiting for response...</div>
-        <div id="streamingContent" class="stream-active" style="display: none;"></div>
-      `;
-      console.log("Prepared answer element for streaming with debug info");
     } else {
-      console.error("Answer element not found");
+      window.backupModelName = null;
     }
 
-    // Reset animation state for the new answer
-    if (typeof resetAnimationState === "function") {
-      resetAnimationState();
-      console.log("Animation state reset");
-    } else {
-      // Fallback if the function isn't available
-      window.previousContent = "";
-      window.animationInProgress = false;
-      window.animationQueue = [];
-      window.streamedContent = "";
-      console.log("Animation state reset (fallback method)");
-    }
-
-    // Update loading message
-    const loading = document.getElementById("loading");
-    if (loading) {
-      loading.innerHTML =
-        '<div class="loader"></div><span>Generating answer...</span>';
-      loading.style.display = "block";
-      console.log("Updated loading message");
-    } else {
-      console.error("Loading element not found");
-    }
-  });
-
-  // Stream chunk event
-  socket.on("streamChunk", (data) => {
-    if (window.isCancelled) return;
-
-    console.log("Received streamChunk via Socket.IO:", data);
-    addDebugLog(
-      `Received stream chunk, length: ${
-        data.chunk ? data.chunk.length : 0
-      } chars`
-    );
-
-    // Check if data.chunk exists
-    if (!data || !data.chunk) {
-      console.error("Invalid streamChunk data received:", data);
-      addDebugLog("Invalid streamChunk data received", "error");
-      return;
-    }
-
-    // Add the new chunk to the total content
-    window.streamedContent += data.chunk;
-    console.log(
-      "Updated streamedContent, length:",
-      window.streamedContent.length
-    );
-
-    // Show a preview of the chunk in the debug log
-    const chunkPreview =
-      data.chunk.length > 30 ? data.chunk.substring(0, 30) + "..." : data.chunk;
-    addDebugLog(`Chunk preview: "${chunkPreview.replace(/\n/g, "\\n")}"`);
-
-    // Update the debug log with the total content length
-    addDebugLog(`Total content length: ${window.streamedContent.length} chars`);
-
-    // DIRECT APPROACH: Also update a live preview of the content as it comes in
-    // This provides a simple, direct way to see the content without relying on the animation system
-    try {
-      // Format the content using our markdown utility
-      let formattedContent;
-      if (typeof window.markdownUtils !== "undefined") {
-        formattedContent = window.markdownUtils.parseMarkdown(
-          window.streamedContent
-        );
-        console.log("Formatted content with markdown utility");
-      } else if (typeof marked !== "undefined") {
-        formattedContent = marked.parse(window.streamedContent);
-        console.log("Formatted content with marked library directly");
-      } else {
-        formattedContent = window.streamedContent
-          .replace(/\n\n/g, "<br><br>")
-          .replace(/\n/g, "<br>");
-        console.log("Formatted content with basic formatting");
-      }
-
-      // Display a preview of the content directly
-      const answerElement = document.getElementById("answer");
-      if (answerElement) {
-        // Check if we already have a direct preview element
-        let previewElement = document.getElementById("livePreview");
-
-        if (!previewElement) {
-          // Create the structure if it doesn't exist
-          answerElement.innerHTML = `
-            <strong>Answer:</strong>
-            <div id="livePreview">${formattedContent}</div>
-            <div id="streamingContent" class="stream-active" style="display: none;"></div>
-          `;
-          console.log("Created live preview element");
-        } else {
-          // Update the existing preview
-          previewElement.innerHTML = formattedContent;
-          console.log("Updated live preview element");
-        }
-      }
-
-      // Also continue with the animation system as a backup
-      if (window.animationQueue.length > 5) {
-        window.animationQueue = window.animationQueue.slice(-4);
-        console.log("Animation queue trimmed to prevent overflow");
-      }
-
-      window.animationQueue.push(formattedContent);
-
-      if (!window.animationInProgress) {
-        console.log("Starting animation process (backup approach)");
-        if (typeof processNextAnimation === "function") {
-          processNextAnimation();
-        } else {
-          console.warn("processNextAnimation function not available");
-          // Fallback - just display the content directly
-          const contentElement = document.getElementById("streamingContent");
-          if (contentElement) {
-            contentElement.innerHTML = formattedContent;
-            contentElement.style.display = "block";
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing markdown:", error);
-    }
-  });
-
-  // Stream end event
-  socket.on("streamEnd", (data) => {
-    if (window.isCancelled) {
-      window.isCancelled = false;
-      addDebugLog(
-        "Stream end ignored because request was cancelled",
-        "warning"
-      );
-      return;
-    }
-
-    console.log("Received streamEnd via Socket.IO:", data);
-    addDebugLog("Received stream end event", "success");
-
-    // Log the full answer length if available
-    if (data && data.fullAnswer) {
-      addDebugLog(
-        `Full answer received, length: ${data.fullAnswer.length} chars`
-      );
-
-      // Show a preview of the answer
-      const answerPreview =
-        data.fullAnswer.length > 50
-          ? data.fullAnswer.substring(0, 50) + "..."
-          : data.fullAnswer;
-      addDebugLog(`Answer preview: "${answerPreview.replace(/\n/g, "\\n")}"`);
-    } else {
-      addDebugLog("No fullAnswer in streamEnd data", "warning");
-    }
-
+    // Hide loading and set status to idle
     const loadingElement = document.getElementById("loading");
-    if (loadingElement) {
-      loadingElement.style.display = "none";
-      console.log("Hidden loading indicator");
-    } else {
-      console.error("Loading element not found");
-    }
+    if (loadingElement) loadingElement.style.display = "none";
 
     const status = document.getElementById("status");
     if (status) {
       status.className = "status idle";
       status.textContent = "Status: Idle";
-      console.log("Updated status to idle");
-    } else {
-      console.error("Status element not found");
     }
 
-    // DIRECT APPROACH: Always display the full answer directly in the answer element
-    // This bypasses the animation system entirely
-    console.log("Displaying answer directly in answer element");
-
-    // Get the full answer from the data or use the accumulated streamedContent
-    const fullAnswer = data.fullAnswer || window.streamedContent;
-    console.log("Full answer length:", fullAnswer.length);
-
-    // Format the answer using our markdown utility
+    // Format and display the answer
+    const answer = data.answer || "";
     let formattedAnswer;
     if (typeof window.markdownUtils !== "undefined") {
-      formattedAnswer = window.markdownUtils.parseMarkdown(fullAnswer);
-      console.log("Formatted answer with markdown utility");
+      formattedAnswer = window.markdownUtils.parseMarkdown(answer);
     } else if (typeof marked !== "undefined") {
-      formattedAnswer = marked.parse(fullAnswer);
-      console.log("Formatted answer with marked library directly");
+      formattedAnswer = marked.parse(answer);
     } else {
-      formattedAnswer = fullAnswer
+      formattedAnswer = answer
         .replace(/\n\n/g, "<br><br>")
         .replace(/\n/g, "<br>");
-      console.log("Formatted answer with basic formatting");
     }
 
-    // Display the answer directly in the answer element
-    const answerElement = document.getElementById("answer");
+    const answerElement = document.getElementById("answer-selected-panel");
     if (answerElement) {
-      // Create a simple structure with the answer
       answerElement.innerHTML = `
         <strong>Answer:</strong>
         <div id="directContent">${formattedAnswer}</div>
       `;
-      console.log("Answer displayed directly in answer element");
-    } else {
-      console.error("Answer element not found for direct update");
     }
 
-    // Also try the animation approach as a backup
-    if (window.animationQueue.length > 0) {
-      console.log("Processing final animation state (backup approach)");
-      const finalContent =
-        window.animationQueue[window.animationQueue.length - 1];
-      window.animationQueue = [];
-
-      const contentElement = document.getElementById("streamingContent");
-      if (contentElement) {
-        contentElement.innerHTML = finalContent;
-        console.log("Updated streamingContent element with final content");
-        contentElement.classList.remove("stream-active");
-      }
-    }
-
+    // Re-enable buttons
     document.getElementById("retryBtn").disabled = false;
     document.getElementById("geminiBtn").disabled = false;
     document.getElementById("toggleBtn").disabled = false;
     document.getElementById("cancelBtn").disabled = true;
 
-    // Store the audio file reference if provided
     if (data.audioFile) {
       window.lastAudioFile = data.audioFile;
     }
 
-    // Enable follow-up checkbox if we have a valid transcript
     if (data.transcript && data.transcript.trim() !== "") {
       window.hasLastQuestion = true;
       updateFollowUpCheckbox();
     }
 
     // Save to history
-    if (data.transcript && data.fullAnswer) {
-      let formattedQuestion = data.transcript;
+    if (data.transcript && answer) {
+      let formattedHistoryQuestion = data.transcript;
       if (data.transcript.includes(" | ")) {
         const questions = data.transcript.split(" | ");
-        formattedQuestion = questions.map((q, i) => `${i + 1}. ${q}`).join(" ");
+        formattedHistoryQuestion = questions
+          .map((q, i) => `${i + 1}. ${q}`)
+          .join(" ");
       }
-
-      // Check if saveToHistory function is available
       if (typeof saveToHistory === "function") {
-        saveToHistory(formattedQuestion, data.fullAnswer);
-      } else {
-        console.warn(
-          "saveToHistory function not available - history not saved"
-        );
-        // Fallback - save to localStorage directly if needed
-        try {
-          const historyKey =
-            "ai_assistant_history_" + new Date().toISOString().split("T")[0];
-          let todayHistory = [];
-          const existingData = localStorage.getItem(historyKey);
-          if (existingData) {
-            todayHistory = JSON.parse(existingData);
-          }
-
-          const newEntry = {
-            id: Date.now(),
-            timestamp: new Date().toISOString(),
-            question: formattedQuestion,
-            answer: data.fullAnswer,
-          };
-
-          todayHistory.push(newEntry);
-          localStorage.setItem(historyKey, JSON.stringify(todayHistory));
-          console.log("Saved history entry using fallback method");
-        } catch (error) {
-          console.error("Failed to save history using fallback method:", error);
-        }
+        saveToHistory(formattedHistoryQuestion, answer);
       }
     }
 
@@ -755,7 +547,6 @@ function setupSocketEventHandlers() {
     if (typeof resetAnimationState === "function") {
       resetAnimationState();
     } else {
-      // Fallback if the function isn't available
       window.previousContent = "";
       window.animationInProgress = false;
       window.animationQueue = [];
@@ -763,12 +554,10 @@ function setupSocketEventHandlers() {
     }
   });
 
-  // Error event
-  socket.on("error", (errorMessage) => {
-    if (window.isCancelled) {
-      window.isCancelled = false;
-      return;
-    }
+  // Processing error event
+  socket.on("processingError", (errorMessage) => {
+    // Always show errors — clear the cancelled flag as a side effect
+    window.isCancelled = false;
 
     console.error("Received error via Socket.IO:", errorMessage);
 
@@ -777,36 +566,11 @@ function setupSocketEventHandlers() {
     status.className = "status idle";
     status.textContent = "Status: Idle";
 
-    document.getElementById(
-      "answer"
-    ).innerHTML = `<strong style="color: red;">Error:</strong> ${errorMessage}`;
-    document.getElementById("retryBtn").disabled = false;
-    document.getElementById("geminiBtn").disabled = false;
-    document.getElementById("toggleBtn").disabled = false;
-    document.getElementById("cancelBtn").disabled = true;
-
-    updateFollowUpCheckbox();
-  });
-
-  // Stream error event
-  socket.on("streamError", (data) => {
-    if (window.isCancelled) {
-      window.isCancelled = false;
-      return;
+    const selPanel = document.getElementById("answer-selected-panel");
+    if (selPanel) {
+      selPanel.innerHTML = `<strong style="color: red;">Error:</strong> ${errorMessage}`;
     }
 
-    console.error("Received streamError via Socket.IO:", data);
-
-    document.getElementById("loading").style.display = "none";
-    const status = document.getElementById("status");
-    status.className = "status idle";
-    status.textContent = "Status: Idle";
-
-    document.getElementById(
-      "answer"
-    ).innerHTML = `<strong style="color: red;">Streaming Error:</strong> ${
-      data.error || "Unknown error"
-    }`;
     document.getElementById("retryBtn").disabled = false;
     document.getElementById("geminiBtn").disabled = false;
     document.getElementById("toggleBtn").disabled = false;
@@ -814,6 +578,58 @@ function setupSocketEventHandlers() {
 
     updateFollowUpCheckbox();
   });
+
+  // Backup model: answer received
+  socket.on("backupUpdate", (data) => {
+    if (window.isCancelled) return;
+
+    const backupPanel = document.getElementById("answer-backup-panel");
+    if (!backupPanel) return;
+
+    const fullAnswer = data.answer || "";
+
+    let formattedBackup;
+    if (typeof window.markdownUtils !== "undefined") {
+      formattedBackup = window.markdownUtils.parseMarkdown(fullAnswer);
+    } else if (typeof marked !== "undefined") {
+      formattedBackup = marked.parse(fullAnswer);
+    } else {
+      formattedBackup = fullAnswer
+        .replace(/\n\n/g, "<br><br>")
+        .replace(/\n/g, "<br>");
+    }
+
+    const _getLabel =
+      window.getModelDisplayName || ((id) => (id || "").split("/").pop() || id);
+    const modelLabel = _getLabel(window.backupModelName) || "Model 2";
+    backupPanel.innerHTML = `
+      <strong>Answer (${modelLabel}):</strong>
+      <div id="backupDirectContent">${formattedBackup}</div>
+    `;
+  });
+}
+
+/**
+ * Switches the visible answer tab between the selected and default model results.
+ * @param {"selected"|"default"} tab - Which tab to activate
+ */
+function switchAnswerTab(tab) {
+  const selectedPanel = document.getElementById("answer-selected-panel");
+  const backupPanel = document.getElementById("answer-backup-panel");
+  const tabSelBtn = document.getElementById("tab-selected");
+  const tabDefBtn = document.getElementById("tab-default");
+
+  if (tab === "default") {
+    if (selectedPanel) selectedPanel.style.display = "none";
+    if (backupPanel) backupPanel.style.display = "";
+    if (tabSelBtn) tabSelBtn.classList.remove("active");
+    if (tabDefBtn) tabDefBtn.classList.add("active");
+  } else {
+    if (selectedPanel) selectedPanel.style.display = "";
+    if (backupPanel) backupPanel.style.display = "none";
+    if (tabSelBtn) tabSelBtn.classList.add("active");
+    if (tabDefBtn) tabDefBtn.classList.remove("active");
+  }
 }
 
 /**
@@ -840,7 +656,7 @@ function updateFollowUpCheckbox() {
 
     // Log the state for debugging
     console.log(
-      `Updated follow-up checkbox: disabled=${followUpCheckbox.disabled}, checked=${followUpCheckbox.checked}, hasLastQuestion=${window.hasLastQuestion}`
+      `Updated follow-up checkbox: disabled=${followUpCheckbox.disabled}, checked=${followUpCheckbox.checked}, hasLastQuestion=${window.hasLastQuestion}`,
     );
   }
 }
@@ -936,7 +752,7 @@ function manualConnect(url) {
 
       // Show an error message to the user
       alert(
-        "Socket.IO client library not loaded. Please refresh the page and try again."
+        "Socket.IO client library not loaded. Please refresh the page and try again.",
       );
 
       // Reject the promise
@@ -993,7 +809,7 @@ function manualConnect(url) {
         isDevEnvironment().then((isDev) => {
           if (isDev) {
             const debugContent = document.getElementById(
-              "socket-debug-content"
+              "socket-debug-content",
             );
             if (debugContent) {
               // Update just the content part, preserving the header and toggle functionality
@@ -1137,7 +953,7 @@ function testSocketConnection() {
     console.error("Socket.IO test timed out after 5 seconds");
     displayDirectResponse(
       "Socket.IO test timed out after 5 seconds. No response received from server.",
-      true
+      true,
     );
   }, 5000);
 
@@ -1147,7 +963,7 @@ function testSocketConnection() {
     console.log("Received test response:", data);
     displayDirectResponse(
       `Socket.IO test successful! Server responded: ${JSON.stringify(data)}`,
-      false
+      false,
     );
   });
 
@@ -1163,7 +979,7 @@ function testSocketConnection() {
 function displayDirectResponse(content, isError = false) {
   console.log("Displaying direct response, isError:", isError);
 
-  const answerElement = document.getElementById("answer");
+  const answerElement = document.getElementById("answer-selected-panel");
   if (!answerElement) {
     console.error("Answer element not found for direct response");
     return;

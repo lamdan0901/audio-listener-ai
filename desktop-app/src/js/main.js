@@ -56,7 +56,7 @@ function updateGlobalRecordingButtons() {
   if (followUpCheckbox) {
     followUpCheckbox.disabled = actuallyRecording || !window.hasLastQuestion;
     console.log(
-      `Follow-up checkbox state: disabled=${followUpCheckbox.disabled}, hasLastQuestion=${window.hasLastQuestion}`
+      `Follow-up checkbox state: disabled=${followUpCheckbox.disabled}, hasLastQuestion=${window.hasLastQuestion}`,
     );
   }
 }
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const savedQuestionContext = localStorage.getItem("questionContext");
   if (savedQuestionContext) {
     const contextSelect = document.querySelector(
-      'select[name="questionContext"]'
+      'select[name="questionContext"]',
     );
     if (contextSelect) {
       contextSelect.value = savedQuestionContext;
@@ -244,7 +244,7 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log("Could not establish Socket.IO connection to any endpoint");
         // The app can still function without a Socket.IO connection
         // Just show a message to the user
-        const answerElement = document.getElementById("answer");
+        const answerElement = document.getElementById("answer-selected-panel");
         if (answerElement) {
           answerElement.innerHTML = `
             <div style="padding: 10px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; margin: 10px 0;">
@@ -272,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Add event listener to save selection to localStorage when changed
   const contextSelect = document.querySelector(
-    'select[name="questionContext"]'
+    'select[name="questionContext"]',
   );
   if (contextSelect) {
     contextSelect.addEventListener("change", function () {
@@ -334,7 +334,7 @@ document.addEventListener("DOMContentLoaded", function () {
           // If there's a last question, we can enable follow-up questions
           if (status && status.hasLastQuestion) {
             console.log(
-              `Previous question found: ${status.lastQuestionPreview}`
+              `Previous question found: ${status.lastQuestionPreview}`,
             );
             window.hasLastQuestion = true;
             followUpCheckbox.disabled = false;
@@ -349,14 +349,14 @@ document.addEventListener("DOMContentLoaded", function () {
           clearTimeout(timeoutId);
           console.log(
             "Error checking session status (non-critical):",
-            error.message
+            error.message,
           );
           // Just continue without the session status - this is non-critical functionality
         });
     } catch (error) {
       console.log(
         "Error in session status check setup (non-critical):",
-        error.message
+        error.message,
       );
       // Continue without the session status
     }

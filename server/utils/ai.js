@@ -10,7 +10,7 @@ try {
 } catch (error) {
   console.error(
     "Failed to initialize Google Generative AI client:",
-    error.message
+    error.message,
   );
   // We'll handle this error when AI features are used
 }
@@ -79,7 +79,7 @@ function buildPrompt(
   lang,
   contextPrompt,
   previousQuestion = null,
-  customContext = ""
+  customContext = "",
 ) {
   // Add previous question context if this is a follow-up
   let followUpContext = "";
@@ -111,11 +111,11 @@ function buildPrompt(
  */
 function getConfiguredGeminiModel(
   withSafetySettings = false,
-  modelName = null
+  modelName = null,
 ) {
   if (!genAI) {
     throw new Error(
-      "Google Generative AI client is not initialized. Check your API key."
+      "Google Generative AI client is not initialized. Check your API key.",
     );
   }
   return getGeminiModel(genAI, { withSafetySettings, modelName });
@@ -129,7 +129,7 @@ async function generateAnswer(
   lang,
   questionContext = "general",
   previousQuestion = null,
-  modelName = null
+  modelName = null,
 ) {
   const model = getConfiguredGeminiModel(false, modelName);
   const contextPrompt = getContextPrompt(questionContext);
@@ -146,35 +146,6 @@ async function generateAnswer(
 }
 
 /**
- * Stream generated answer using Gemini API
- */
-async function* streamGeneratedAnswer(
-  question,
-  lang,
-  questionContext = "general",
-  previousQuestion = null,
-  customContext = "",
-  modelName = null
-) {
-  const model = getConfiguredGeminiModel(false, modelName);
-  const contextPrompt = getContextPrompt(questionContext);
-  const prompt = buildPrompt(
-    question,
-    lang,
-    contextPrompt,
-    previousQuestion,
-    customContext
-  );
-
-  const result = await model.generateContentStream(prompt);
-
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
-    if (chunkText) yield chunkText;
-  }
-}
-
-/**
  * Process audio directly with Gemini API
  * This bypasses the Speech-to-Text step and sends audio directly to Gemini
  */
@@ -183,7 +154,7 @@ async function processAudioWithGemini(
   lang = "en",
   questionContext = "general",
   customContext = "",
-  modelName = null
+  modelName = null,
 ) {
   return processAudioGeneric(filePath, async (audioBase64) => {
     console.log(`Processing audio directly with Gemini: ${filePath}`);
@@ -247,7 +218,7 @@ async function processAudioWithGemini(
       transcript = questionsMatches.map((match) => match[1].trim()).join(" | ");
       console.log(
         "Extracted multiple questions from Gemini response:",
-        transcript
+        transcript,
       );
     } else {
       // Try alternative patterns if the specific format wasn't found
@@ -258,7 +229,7 @@ async function processAudioWithGemini(
         transcript = altMatches.map((match) => match[1].trim()).join(" | ");
         console.log(
           "Extracted questions using alternative pattern:",
-          transcript
+          transcript,
         );
       } else {
         // Try the "I heard you ask" pattern
@@ -270,7 +241,7 @@ async function processAudioWithGemini(
           transcript = heardMatches.map((match) => match[1].trim()).join(" | ");
           console.log(
             "Extracted questions using 'heard you ask' pattern:",
-            transcript
+            transcript,
           );
         } else {
           // Try the simplest pattern - just looking for question mark
@@ -283,7 +254,7 @@ async function processAudioWithGemini(
               .join(" | ");
             console.log(
               "Extracted questions using simple pattern:",
-              transcript
+              transcript,
             );
           } else {
             // If we can't extract the specific question, use the first line or paragraph
@@ -305,6 +276,5 @@ async function processAudioWithGemini(
 
 module.exports = {
   generateAnswer,
-  streamGeneratedAnswer,
   processAudioWithGemini,
 };

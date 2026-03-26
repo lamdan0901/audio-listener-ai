@@ -33,7 +33,11 @@ async function toggleRecording() {
     // START RECORDING
     // Reset UI elements when starting a new recording
     document.getElementById("question").innerHTML = "";
-    document.getElementById("answer").innerHTML = "";
+    document.getElementById("answer-selected-panel").innerHTML = "";
+    document.getElementById("answer-backup-panel").innerHTML = "";
+    window.backupStreamedContent = "";
+    const _startTabs = document.getElementById("answer-tabs");
+    if (_startTabs) _startTabs.style.display = "none";
     retryBtn.disabled = true;
     geminiBtn.disabled = true;
     cancelBtn.disabled = false;
@@ -111,7 +115,7 @@ async function toggleRecording() {
       }
 
       console.log(
-        `Audio recording stopped. Blob size: ${audioBlob.size} bytes`
+        `Audio recording stopped. Blob size: ${audioBlob.size} bytes`,
       );
 
       // Save the audio blob for retry and Gemini processing
@@ -126,9 +130,13 @@ async function toggleRecording() {
       formData.append("questionContext", questionContext);
       formData.append("customContext", customContext);
       formData.append("isFollowUp", isFollowUp);
-      // Get the selected model
+      // Get the selected models
       const model = window.getSelectedModel ? window.getSelectedModel() : null;
+      const model2 = window.getSelectedModel2
+        ? window.getSelectedModel2()
+        : null;
       if (model) formData.append("model", model);
+      if (model2) formData.append("model2", model2);
 
       const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 
@@ -237,14 +245,11 @@ async function processStream(reader) {
 /** Handles the start of the streaming process (UI updates) */
 function handleStreamStart() {
   if (window.isCancelled) return;
-  const loading = document.getElementById("loading");
-  loading.innerHTML = '<div class="loader"></div><span>Processing...</span>'; // Generic processing message
-  loading.style.display = "block";
   const status = document.getElementById("status");
   status.className = "status recording"; // Use 'recording' style for processing
   status.textContent = "Status: Processing...";
   document.getElementById("question").innerHTML = "";
-  document.getElementById("answer").innerHTML =
+  document.getElementById("answer-selected-panel").innerHTML =
     '<strong>Answer:</strong> <div id="streamingContent" class="stream-active"></div>';
   document.getElementById("retryBtn").disabled = true;
   document.getElementById("geminiBtn").disabled = true;
@@ -385,9 +390,15 @@ function handleStreamError(errorMessage) {
     window.updateGlobalRecordingButtons();
   }
 
-  document.getElementById(
-    "answer"
-  ).innerHTML = `<strong style="color: red;">Error:</strong> ${errorMessage}`;
+  const _errPanel = document.getElementById("answer-selected-panel");
+  if (_errPanel) {
+    _errPanel.innerHTML = `<strong style="color: red;">Error:</strong> ${errorMessage}`;
+  }
+  // Auto-switch to backup tab if one is available
+  const _errTabs = document.getElementById("answer-tabs");
+  if (_errTabs && _errTabs.style.display !== "none") {
+    if (typeof switchAnswerTab === "function") switchAnswerTab("default");
+  }
 }
 
 /**
@@ -423,7 +434,7 @@ async function processStream(reader) {
               "Error parsing final buffer content:",
               e,
               "Buffer:",
-              buffer
+              buffer,
             );
             handleStreamError("Error processing final data from server.");
           }
@@ -517,13 +528,12 @@ function handleTranscript(transcriptData) {
 
   // Only update the question display if there's actual content
   if (formattedQuestion.trim()) {
-    document.getElementById(
-      "question"
-    ).innerHTML = `<strong>Question:</strong> ${formattedQuestion}`;
+    document.getElementById("question").innerHTML =
+      `<strong>Question:</strong> ${formattedQuestion}`;
   }
 
   // Prepare for answer streaming
-  document.getElementById("answer").innerHTML =
+  document.getElementById("answer-selected-panel").innerHTML =
     '<strong>Answer:</strong> <div id="streamingContent" class="stream-active"></div>';
   window.streamedContent = ""; // Reset streamed content for animation
   window.previousContent = "";
@@ -568,7 +578,7 @@ function handleStreamChunk(chunk) {
   let formattedContent;
   if (typeof window.markdownUtils !== "undefined") {
     formattedContent = window.markdownUtils.parseMarkdown(
-      window.streamedContent
+      window.streamedContent,
     );
   } else {
     formattedContent = marked.parse(window.streamedContent);
@@ -603,7 +613,11 @@ function handleStreamChunk(chunk) {
 async function retryTranscription() {
   // Reset UI for new processing
   document.getElementById("question").innerHTML = "";
-  document.getElementById("answer").innerHTML = "";
+  document.getElementById("answer-selected-panel").innerHTML = "";
+  document.getElementById("answer-backup-panel").innerHTML = "";
+  window.backupStreamedContent = "";
+  const _retryTabs = document.getElementById("answer-tabs");
+  if (_retryTabs) _retryTabs.style.display = "none";
 
   // Check if we have a blob to retry with
   if (!window.lastRecordedAudioBlob) {
@@ -662,7 +676,11 @@ async function retryTranscription() {
     formData.append("customContext", customContext);
     formData.append("isFollowUp", isFollowUp);
     formData.append("isRetry", "true"); // Flag this as a retry attempt
+    const model2Retry = window.getSelectedModel2
+      ? window.getSelectedModel2()
+      : null;
     if (model) formData.append("model", model);
+    if (model2Retry) formData.append("model2", model2Retry);
 
     const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 
@@ -727,7 +745,11 @@ async function processWithGemini() {
 
   // Reset UI for new processing
   document.getElementById("question").innerHTML = "";
-  document.getElementById("answer").innerHTML = "";
+  document.getElementById("answer-selected-panel").innerHTML = "";
+  document.getElementById("answer-backup-panel").innerHTML = "";
+  window.backupStreamedContent = "";
+  const _geminiTabs = document.getElementById("answer-tabs");
+  if (_geminiTabs) _geminiTabs.style.display = "none";
 
   // Check if we have a blob to process with
   if (!window.lastRecordedAudioBlob) {
@@ -784,7 +806,14 @@ async function processWithGemini() {
     formData.append("customContext", customContext);
     formData.append("isFollowUp", isFollowUp);
     formData.append("useGemini", "true"); // Flag to use Gemini processing
-    if (model) formData.append("model", model);
+    const modelGemini = window.getSelectedModel
+      ? window.getSelectedModel()
+      : null;
+    const model2Gemini = window.getSelectedModel2
+      ? window.getSelectedModel2()
+      : null;
+    if (modelGemini) formData.append("model", modelGemini);
+    if (model2Gemini) formData.append("model2", model2Gemini);
 
     const apiUrl = window.electronAPI.getApiBaseUrl(); // Get API URL from preload
 
@@ -883,7 +912,7 @@ async function cancelRequest() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     }).catch((err) =>
-      console.error("Error sending cancel request to server:", err)
+      console.error("Error sending cancel request to server:", err),
     ); // Log error but don't block UI reset
   }
 
@@ -903,7 +932,11 @@ async function cancelRequest() {
 
   // Clear any results that might have been displayed
   document.getElementById("question").innerHTML = "";
-  document.getElementById("answer").innerHTML = "";
+  document.getElementById("answer-selected-panel").innerHTML = "";
+  document.getElementById("answer-backup-panel").innerHTML = "";
+  window.backupStreamedContent = "";
+  const _cancelTabs = document.getElementById("answer-tabs");
+  if (_cancelTabs) _cancelTabs.style.display = "none";
 
   // Re-enable follow-up checkbox if we have a previous question
   updateFollowUpCheckbox(); // Use the helper function
@@ -933,7 +966,7 @@ function updateFollowUpCheckbox() {
 
     // Log the state for debugging
     console.log(
-      `Updated follow-up checkbox: disabled=${followUpCheckbox.disabled}, checked=${followUpCheckbox.checked}, hasLastQuestion=${window.hasLastQuestion}`
+      `Updated follow-up checkbox: disabled=${followUpCheckbox.disabled}, checked=${followUpCheckbox.checked}, hasLastQuestion=${window.hasLastQuestion}`,
     );
   }
 }
@@ -953,7 +986,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Verify audio recorder is available
   if (!window.audioRecorder) {
     console.error(
-      "Audio recorder not found - ensure audio-recorder.js is loaded first"
+      "Audio recorder not found - ensure audio-recorder.js is loaded first",
     );
     return;
   }
