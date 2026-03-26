@@ -5,7 +5,7 @@
  */
 
 // Track the current audio source
-let currentAudioSource = "microphone"; // Default to microphone
+let currentAudioSource = "system"; // Default to system audio
 
 // Initialize device selection on page load
 document.addEventListener("DOMContentLoaded", initializeAudioDevices);
@@ -32,12 +32,12 @@ function isSystemAudioSupported() {
   ) {
     const isSupported = window.electronAPI.isSystemAudioCaptureSupported();
     console.log(
-      `Electron reports system audio capture supported: ${isSupported}`
+      `Electron reports system audio capture supported: ${isSupported}`,
     );
 
     if (isSupported) {
       console.log(
-        "System audio capture is supported via Electron's desktopCapturer"
+        "System audio capture is supported via Electron's desktopCapturer",
       );
     }
 
@@ -47,13 +47,13 @@ function isSystemAudioSupported() {
   // For non-Electron environments or older Electron versions
   if (isElectron) {
     console.log(
-      "Detected Electron environment but no custom API - system audio capture may not be fully supported"
+      "Detected Electron environment but no custom API - system audio capture may not be fully supported",
     );
 
     // We'll still return true if the API is available, but we'll show a warning
     if (apiAvailable) {
       console.log(
-        "getDisplayMedia API is available, but may not support system audio in standard Electron"
+        "getDisplayMedia API is available, but may not support system audio in standard Electron",
       );
     }
   }
@@ -69,11 +69,11 @@ async function initializeAudioDevices() {
   await refreshAudioDevices();
 
   // Set default audio source
-  selectAudioSource("microphone");
+  selectAudioSource("system");
 
   // Check if system audio is supported and update UI accordingly
   const systemAudioOption = document.querySelector(
-    'input[name="audioSource"][value="system"]'
+    'input[name="audioSource"][value="system"]',
   );
   if (systemAudioOption) {
     // Check if we're in Electron
@@ -105,12 +105,12 @@ async function initializeAudioDevices() {
 
           // Insert after the audio source selection
           const audioSourceDiv = document.getElementById(
-            "audio-source-selection"
+            "audio-source-selection",
           );
           if (audioSourceDiv) {
             audioSourceDiv.parentNode.insertBefore(
               noteElement,
-              audioSourceDiv.nextSibling
+              audioSourceDiv.nextSibling,
             );
           }
         }
@@ -182,7 +182,7 @@ async function refreshAudioDevices() {
         deviceSelect.appendChild(option);
       });
       console.log(
-        `Added ${devices.length} audio devices to selection dropdown`
+        `Added ${devices.length} audio devices to selection dropdown`,
       );
     } else {
       console.warn("No audio input devices found");
@@ -202,7 +202,7 @@ async function refreshAudioDevices() {
       // If the device is no longer available, reset to default
       if (deviceSelect.value !== currentDevice) {
         console.warn(
-          `Previously selected device ${currentDevice} is no longer available`
+          `Previously selected device ${currentDevice} is no longer available`,
         );
         window.audioRecorder.setAudioDevice(null);
       }
@@ -278,13 +278,13 @@ function selectAudioSource(sourceType) {
   // If trying to select system audio but it's not supported, fall back to microphone
   if (sourceType === "system" && !isSystemAudioSupported()) {
     console.warn(
-      "System audio capture not supported, falling back to microphone"
+      "System audio capture not supported, falling back to microphone",
     );
     sourceType = "microphone";
 
     // Update the radio button selection
     const micRadio = document.querySelector(
-      'input[name="audioSource"][value="microphone"]'
+      'input[name="audioSource"][value="microphone"]',
     );
     if (micRadio) {
       micRadio.checked = true;

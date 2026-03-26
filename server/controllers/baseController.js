@@ -21,9 +21,9 @@ function prepareRequestParams(reqBody) {
     questionContext: reqBody.questionContext || "general",
     customContext: reqBody.customContext || "",
     isFollowUp: reqBody.isFollowUp === true,
-    useStreaming: reqBody.useStreaming !== false, // Default to true
     audioFile: reqBody.audioFile || null,
     model: reqBody.model || null,
+    model2: reqBody.model2 || null,
   };
 }
 
@@ -38,7 +38,7 @@ function handleFollowUpLogic(isFollowUp, transcript, storeQuestion = true) {
   // If this is a follow-up and we don't have a stored question, log a warning
   if (isFollowUp && !lastQuestion) {
     console.log(
-      "Follow-up requested but no previous question exists - proceeding but may not have context"
+      "Follow-up requested but no previous question exists - proceeding but may not have context",
     );
   }
 

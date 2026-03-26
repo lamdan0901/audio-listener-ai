@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <title>Audio Listener AI</title>
@@ -18,11 +18,11 @@
     <div id="language-selection">
       <strong>Language:</strong>
       <label>
-        <input type="radio" name="language" value="vi" />
+        <input type="radio" name="language" value="vi" checked />
         Vietnamese
       </label>
       <label>
-        <input type="radio" name="language" value="en" checked />
+        <input type="radio" name="language" value="en" />
         English
       </label>
     </div>
@@ -80,7 +80,6 @@
           type="radio"
           name="audioSource"
           value="microphone"
-          checked
           onchange="selectAudioSource('microphone')"
         />
         Microphone
@@ -90,6 +89,7 @@
           type="radio"
           name="audioSource"
           value="system"
+          checked
           onchange="selectAudioSource('system')"
         />
         System Audio
@@ -120,7 +120,29 @@
     <button onclick="cancelRequest()" id="cancelBtn" disabled>Cancel</button>
 
     <div id="question"></div>
-    <div id="answer"></div>
+
+    <!-- Dual-model answer tabs (shown only when a non-default model is selected) -->
+    <div id="answer-tabs" style="display: none">
+      <button
+        id="tab-selected"
+        class="answer-tab active"
+        onclick="switchAnswerTab('selected')"
+      >
+        Selected Model
+      </button>
+      <button
+        id="tab-default"
+        class="answer-tab"
+        onclick="switchAnswerTab('default')"
+      >
+        Default Model
+      </button>
+    </div>
+
+    <div id="answer">
+      <div id="answer-selected-panel"></div>
+      <div id="answer-backup-panel" style="display: none"></div>
+    </div>
 
     <div
       id="history-section"

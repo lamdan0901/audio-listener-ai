@@ -47,7 +47,7 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-  })
+  }),
 );
 
 const recordingRoutes = require("./routes/recordingRoutes")();
@@ -57,7 +57,7 @@ const modelRoutes = require("./routes/modelRoutes")();
 // Middleware to log Socket.IO polling requests
 app.use("/socket.io", (req, res, next) => {
   console.log(
-    `Received request for Socket.IO path: ${req.method} ${req.originalUrl}`
+    `Received request for Socket.IO path: ${req.method} ${req.originalUrl}`,
   );
   next(); // Continue to the next middleware/handler (which should be Socket.IO)
 });
@@ -144,9 +144,9 @@ io.on("connection", (socket) => {
 });
 
 // Bridge backend events to Socket.IO
-backendEvents.on("error", (errorMessage) => {
-  console.error("Broadcasting error via Socket.IO:", errorMessage);
-  io.emit("error", errorMessage);
+backendEvents.on("processingError", (errorMessage) => {
+  console.error("Broadcasting processingError via Socket.IO:", errorMessage);
+  io.emit("processingError", errorMessage);
 });
 
 backendEvents.on("processingCancelled", (data) => {
@@ -168,20 +168,9 @@ backendEvents.on("update", (data) => {
   io.emit("update", data);
 });
 
-backendEvents.on("streamChunk", (data) => {
-  // Avoid excessive logging for chunks
-  // console.log("Broadcasting streamChunk via Socket.IO:", data);
-  io.emit("streamChunk", data);
-});
-
-backendEvents.on("streamEnd", (data) => {
-  console.log("Broadcasting streamEnd via Socket.IO.");
-  io.emit("streamEnd", data);
-});
-
-backendEvents.on("streamError", (data) => {
-  console.error("Broadcasting streamError via Socket.IO:", data);
-  io.emit("streamError", data);
+backendEvents.on("backupUpdate", (data) => {
+  console.log("Broadcasting backupUpdate via Socket.IO.");
+  io.emit("backupUpdate", data);
 });
 
 process.on("exit", () => {
@@ -218,7 +207,7 @@ server.listen(PORT, () => {
     .catch((err) =>
       console.warn(
         "FFmpeg not available, some audio format conversions may fail:",
-        err
-      )
+        err,
+      ),
     );
 });

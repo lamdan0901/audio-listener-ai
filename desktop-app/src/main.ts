@@ -17,7 +17,7 @@ if (!process.env.NODE_ENV) {
 // IF .env IS COPIED TO THE SAME DIRECTORY AS main.js (e.g., dist/)
 const envPath = path.join(
   __dirname,
-  process.env.NODE_ENV === "production" ? ".env.production" : ".env"
+  process.env.NODE_ENV === "production" ? ".env.production" : ".env",
 );
 
 // dotenv can often read from within ASAR if the path is correct relative to ASAR structure.
@@ -31,7 +31,7 @@ try {
   }
   if (!process.env.API_BASE_URL) {
     console.warn(
-      ".env file might have been found by path, but API_BASE_URL was not loaded from it or is empty."
+      ".env file might have been found by path, but API_BASE_URL was not loaded from it or is empty.",
     );
   }
 } catch (e) {
@@ -46,7 +46,7 @@ let isAlwaysOnTop = false;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
-    height: 600,
+    height: 900,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"), // Use path.join for cross-platform compatibility
       contextIsolation: true, // Protect against prototype pollution
@@ -99,7 +99,7 @@ app.whenReady().then(() => {
       .then((sources) => {
         if (sources.length > 0) {
           console.log(
-            `Found ${sources.length} screen sources, using first source`
+            `Found ${sources.length} screen sources, using first source`,
           );
           // Use the first source and specify 'loopback' for system audio
           callback({ video: sources[0], audio: "loopback" });
